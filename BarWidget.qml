@@ -5,6 +5,9 @@ import qs.Commons
 import qs.Ui
 import "." as Core
 
+// Bar label + host for the Flowstate panel. Left-click opens the panel,
+// middle-click starts/pauses, right-click resets. The bar pill lights up in
+// the phase color while a Pomodoro session is running.
 BarWidget {
   id: root
   moduleName: "io.github.keegan-sucks.flowstate"
@@ -38,8 +41,9 @@ BarWidget {
     st.slot2Uri = String(root.setting("slot2Uri", st.slot2Uri))
     st.slot3Label = String(root.setting("slot3Label", st.slot3Label))
     st.slot3Uri = String(root.setting("slot3Uri", st.slot3Uri))
-    st.setActiveSlot(root.configuredInt("activeSlot", 0, 0, 2))
-    st.spotifyVolume = root.configuredInt("spotifyVolume", 40, 0, 100)
+    st.setActiveSlot(root.configuredInt("activeSlot", 2, 0, 2))
+    st.spotifyVolume = root.configuredInt("spotifyVolume", 35, 0, 100)
+    st.alwaysShuffle = root.setting("alwaysShuffle", true) !== false
     st.blockSites = root.setting("blockSites", true) !== false
     st.catSocial = root.setting("catSocial", true) !== false
     st.catVideo = root.setting("catVideo", true) !== false
@@ -49,9 +53,9 @@ BarWidget {
     st.extraDomains = String(root.setting("extraDomains", st.extraDomains))
     st.openSpotify = root.setting("openSpotify", true) !== false
     st.openObsidian = root.setting("openObsidian", true) !== false
+    st.isolateObsidian = root.setting("isolateObsidian", true) !== false
+    st.focusWorkspace = root.configuredInt("focusWorkspace", 0, 0, 99)
     st.spotifyWorkspace = root.configuredInt("spotifyWorkspace", 9, 0, 99)
-    st.musicPlayer = String(root.setting("musicPlayer", "auto"))
-    st.alwaysShuffle = root.setting("alwaysShuffle", true) !== false
   }
 
   function injectPanel() {
@@ -119,12 +123,7 @@ BarWidget {
       Core.FocusState.skipPomodoroPhase()
       return Core.FocusState.statusText
     }
-    function stopwatch(): string {
-      Core.FocusState.selectMode(Core.FocusState.stopwatchMode)
-      return Core.FocusState.statusText
-    }
     function pomodoro(workMinutes: string, shortBreakMinutes: string, cycles: string, longBreakMinutes: string): string {
-      Core.FocusState.selectMode(Core.FocusState.pomodoroMode)
       Core.FocusState.setPomodoroWorkMinutes(parseInt(workMinutes, 10) || 25)
       Core.FocusState.setPomodoroShortBreakMinutes(parseInt(shortBreakMinutes, 10) || 5)
       Core.FocusState.setPomodoroCycles(parseInt(cycles, 10) || 4)

@@ -1,154 +1,276 @@
-# Flowstate for Omarchy
+<div align="center">
 
-A focus timer for the Omarchy bar. Two modes — **Stopwatch** and **Pomodoro** —
-and when you start a session it can:
+# 🍅 Flowstate
 
-- **Block distracting sites** (an extensive, categorized blocklist)
-- **Open your music player** and start a focus **soundtrack** (shuffled), at a set volume
-- **Open Obsidian** (if it isn't already running)
+### A Pomodoro focus timer for the [Omarchy](https://omarchy.org) bar
 
-Blocking and music persist through Pomodoro breaks and are released only when you
-stop or finish the session. Ending a session unblocks the sites, restores the
-music player's previous volume, and pauses it; Obsidian is left open.
+Start a session and your whole desktop drops into focus mode — Obsidian alone in
+front of you, a shuffled Spotify soundtrack playing quietly out of the way, and
+the internet's time-sinks blocked at the `/etc/hosts` level until you're done.
 
-The widget lives in the bar, follows your Omarchy theme automatically, and its bar
-position is chosen at install time (and movable afterwards).
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Omarchy plugin](https://img.shields.io/badge/Omarchy-bar_widget-8839ef)
+![Technique](https://img.shields.io/badge/technique-Pomodoro-e11d48)
+![Theme](https://img.shields.io/badge/theme-follows_Omarchy-1e8a5c)
+
+<img src="preview.jpeg" alt="Flowstate panel in the Omarchy bar" width="720">
+
+</div>
+
+---
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Requirements](#requirements)
+- [Install](#install)
+  - [1 · The plugin](#1--the-plugin)
+  - [2 · Music — `spotify_player`](#2--music--spotify_player)
+  - [3 · Site blocker](#3--site-blocker)
+- [Usage](#usage)
+- [Configuring soundtracks](#configuring-soundtracks)
+- [Settings reference](#settings-reference)
+- [Scripting (IPC)](#scripting-ipc)
+- [How focus isolation works](#how-focus-isolation-works)
+- [Uninstall](#uninstall)
+- [License](#license)
+
+---
+
+## What it does
+
+When you start a session, Flowstate runs a set of **focus effects** (all
+individually toggleable) and holds them for the whole Pomodoro cycle — through
+every short and long break — releasing them only when you **stop** or the cycle
+**finishes**:
+
+| | Effect | Details |
+|---|---|---|
+| 🧘 | **Isolate Obsidian** | Launches or focuses Obsidian on your focus workspace and parks every *other* window out of sight, so Obsidian is the only thing in front of you. |
+| 🎧 | **Play a soundtrack** | Starts `spotify_player` on a far-off workspace (default **9**), shuffled, at a quiet volume — including your **Liked Songs**. |
+| 🚫 | **Block distractions** | Adds curated blocklists (social, video, shopping, news; adult optional) to `/etc/hosts` for the duration of the session. |
+| ⏱️ | **Run the Pomodoro** | Configurable focus / short-break / long-break lengths and cycle count, with optional bells between phases. |
+
+When the session ends, Flowstate **unblocks** the sites, **restores** Spotify's
+previous volume and pauses it, and **un-parks** your windows. Obsidian is left
+open. Prefer just the timer? Flip off **Focus effects** and Flowstate is a plain
+Pomodoro in your bar.
+
+The widget lives in the bar and **follows your Omarchy theme automatically**.
+
+---
+
+## Requirements
+
+| Dependency | Why | Notes |
+|---|---|---|
+| **Omarchy** (Quickshell shell + Hyprland) | Host for the bar widget | Already present on Omarchy |
+| [`spotify_player`](https://github.com/aome510/spotify-player) | Soundtrack playback, shuffle, volume | AUR · **Spotify Premium required** for streaming |
+| **Obsidian** | The app that gets isolated | Optional — turn off *Open Obsidian* if unused |
+| `hyprctl` + `jq` | Window placement / parking | `jq` from the repos |
+| `pactl` / `pw-play` | Pomodoro bells | Ships with Omarchy's audio stack |
+
+Everything except Obsidian and Spotify Premium is installed for you by the setup
+scripts below.
+
+---
 
 ## Install
 
+The plugin ships in Omarchy's plugin directory. From there, one script wires up
+all three pieces (each step is independently re-runnable):
+
 ```sh
-omarchy plugin add https://github.com/keegan-sucks/omarchy-flowstate.git --enable
-omarchy bar move io.github.keegan-sucks.flowstate --section right   # left | center | right
+cd ~/.config/omarchy/plugins/io.github.keegan-sucks.flowstate/scripts
+./install.sh                     # validate → enable → place icon → install deps
 ```
+
+Prefer non-interactive icon placement? Pass a section:
+
+```sh
+./install.sh --section center    # center | left | right
+```
+
+`install.sh` walks through:
+
+1. **Plugin** — validates the manifest, enables the widget, and places the bar
+   icon where you choose.
+2. **`spotify_player`** — installs it from the AUR and offers to authenticate.
+3. **Site blocker** — installs the privileged `/etc/hosts` helper (needs sudo).
+
+You can also run any of the three on its own — read on.
+
+### 1 · The plugin
+
+If you only want to (re)enable the widget and place its icon:
+
+```sh
+./install.sh --section center
+```
+
+### 2 · Music — `spotify_player`
+
+Flowstate drives [`spotify_player`](https://github.com/aome510/spotify-player), a
+terminal Spotify client that doubles as its own Spotify Connect device and CLI
+server. That combination is what makes **forced shuffle**, **Liked Songs**, and
+**scripted volume** work reliably — the official Linux client can't do these over
+MPRIS. Streaming requires **Spotify Premium**.
+
+```sh
+./install-spotify-player.sh
+spotify_player authenticate      # one-time: OAuth login + librespot streaming login
+```
+
+It uses `spotify_player`'s bundled client ID, so you **do not** need to register
+a Spotify developer app.
+
+### 3 · Site blocker
+
+Editing `/etc/hosts` needs root, so blocking is set up once and then runs
+password-free during sessions:
+
+```sh
+sudo ./install-blocker.sh            # installs the helper + a scoped NOPASSWD rule
+sudo ./install-blocker.sh --uninstall
+```
+
+This installs `/usr/local/bin/flowstate-hosts` (root-owned) plus a **narrowly
+scoped** `sudoers` rule so sessions can toggle blocking without a prompt. Only a
+marked region of `/etc/hosts` is ever touched — the rest of the file is left
+exactly as it was.
+
+The blocklist is **bundled and categorized** in `blocklists/*.txt`:
+
+| Category | Source |
+|---|---|
+| Social | [StevenBlack `alternates/social-only`](https://github.com/StevenBlack/hosts) |
+| Adult | [StevenBlack `alternates/porn-only`](https://github.com/StevenBlack/hosts) — *off by default* |
+| Video / Shopping / News | Curated, high-signal lists |
+
+Toggle categories and add your own domains from the panel's **⚙ Edit** view, or
+edit the `blocklists/*.txt` files directly to change the lists.
+
+---
+
+## Usage
+
+**On the bar:**
+
+| Action | Result |
+|---|---|
+| **Left-click** | Open / close the panel |
+| **Middle-click** | Start / pause the session |
+| **Right-click** | Reset |
+
+The bar pill lights up while a session is running.
+
+**In the panel**, the main view is deliberately short — just the timer and your
+soundtrack buttons. Everything else lives under **⚙ Edit** so the panel never
+scrolls: volume, the **Focus effects** master switch, **Pomodoro sounds**, the
+cycle lengths, soundtrack links, and block categories.
+
+**Keyboard** (while the panel is focused):
+
+| Key | Action |
+|---|---|
+| `Space` | Start / pause |
+| `R` | Reset |
+| `S` | Skip the current phase |
+| `E` | Toggle the Edit view |
+
+---
+
+## Configuring soundtracks
+
+Flowstate gives you **three soundtrack slots**. Open the panel → **⚙ Edit**, then
+set each slot's name and Spotify link:
+
+- Paste a share URL — `https://open.spotify.com/playlist/…`
+- …or a URI — `spotify:playlist:…` (playlists, albums, and artists all work)
+- …or the keyword **`liked`** to shuffle your **Liked Songs**
+
+Defaults are **Lofi**, **Nature**, and **Liked** (selected). Clear a slot's link
+to hide its button. The **volume** slider under ⚙ Edit sets the session volume —
+applied on start and restored to your previous level on stop.
+
+---
+
+## Settings reference
+
+Every setting is editable three ways: the widget's settings pane, the panel's
+**⚙ Edit** view, or the CLI:
+
+```sh
+omarchy bar set io.github.keegan-sucks.flowstate <key> <value>
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `focusEffects` | `true` | Master switch for all side-effects |
+| `alwaysShuffle` | `true` | Shuffle the soundtrack on start |
+| `slot1Label` / `slot1Uri` | Lofi | First soundtrack name + link |
+| `slot2Label` / `slot2Uri` | Nature | Second soundtrack |
+| `slot3Label` / `slot3Uri` | Liked / `liked` | Third soundtrack; `liked` = Liked Songs |
+| `activeSlot` | `2` | Selected soundtrack index (0–2) |
+| `spotifyVolume` | `35` | Focus volume (0–100); previous volume restored on stop |
+| `openSpotify` | `true` | Launch `spotify_player` and start the soundtrack on start |
+| `openObsidian` | `true` | Launch / focus Obsidian on start |
+| `isolateObsidian` | `true` | Park other windows so Obsidian is alone on the focus workspace |
+| `focusWorkspace` | `0` | Obsidian's workspace (`0` = whichever is active on start) |
+| `spotifyWorkspace` | `9` | Workspace to place `spotify_player` on (`0` disables placement) |
+| `blockSites` | `true` | Toggle site blocking |
+| `catSocial` / `catVideo` / `catShopping` / `catNews` | `true` | Blocklist categories |
+| `catAdult` | `false` | Adult category |
+| `extraDomains` | *(empty)* | Extra comma/newline-separated domains to block |
+| `pomodoroWorkMinutes` | `25` | Length of each focus phase |
+| `pomodoroShortBreakMinutes` | `5` | Short break length |
+| `pomodoroCycles` | `4` | Focus phases before the long break |
+| `pomodoroLongBreakMinutes` | `15` | Long break length |
+| `pomodoroSound` | `true` | Bells between phases / at completion |
+
+---
+
+## Scripting (IPC)
+
+Drive Flowstate from scripts or keybindings via `omarchy-shell`:
+
+```sh
+id=io.github.keegan-sucks.flowstate
+
+omarchy-shell "$id" status               # print current state
+omarchy-shell "$id" pomodoro 25 5 4 15   # set work / short / cycles / long
+omarchy-shell "$id" start                # also: pause | toggleTimer | skip | reset
+omarchy-shell "$id" open                 # also: close | toggle
+```
+
+---
+
+## How focus isolation works
+
+On **start**, Obsidian is moved to the focus workspace silently, every *other*
+window on that workspace is moved into a hidden `special:flowstate` workspace,
+and the focus workspace is activated with Obsidian focused. `spotify_player` is
+placed on the music workspace the same way — via `hyprctl`, with **no Hyprland
+window rule required**.
+
+On **stop**, the parked windows are moved back where they came from, Spotify's
+volume is restored and playback paused, and the `/etc/hosts` block region is
+cleared. Obsidian stays open.
+
+---
 
 ## Uninstall
 
 ```sh
-omarchy plugin remove io.github.keegan-sucks.flowstate
+omarchy plugin disable io.github.keegan-sucks.flowstate
+sudo ~/.config/omarchy/plugins/io.github.keegan-sucks.flowstate/scripts/install-blocker.sh --uninstall
 ```
 
-If you ran the optional setup scripts, undo them too:
+The blocker uninstall removes the helper binary and the scoped `sudoers` rule
+and clears any remaining block region from `/etc/hosts`.
 
-```sh
-cd ~/.config/omarchy/plugins/io.github.keegan-sucks.flowstate/scripts   # (before removing, if still present)
-sudo ./install-blocker.sh --uninstall        # removes the root helper + sudoers rule
-./install-workspace-rule.sh --uninstall      # removes the Hyprland window rule
-```
-
-## Music player: ncspot recommended
-
-Flowstate drives Spotify over MPRIS and works with either client:
-
-- **ncspot** (recommended) — supports **shuffle**, which the official Spotify Linux
-  client silently ignores over MPRIS. Flowstate **auto-detects and prefers ncspot**
-  when it's installed. Install it and log in once:
-  ```sh
-  cd ~/.config/omarchy/plugins/io.github.keegan-sucks.flowstate/scripts
-  ./install-ncspot.sh
-  ncspot            # log in once (Spotify Premium required for playback)
-  ```
-- **Official Spotify** — used as a fallback. Plays your playlists, but **cannot
-  shuffle** and cannot play Liked Songs (Spotify client limitations).
-
-### Liked Songs (ncspot only)
-
-The default **third slot is "Liked"** (URI keyword `liked`). On **ncspot** it plays
-your Liked/Saved songs — shuffled — by driving ncspot's Library over its IPC socket
-(needs `socat` or `nc`). There is no playable Liked-Songs URI, so the **official
-Spotify client cannot do this**; on that client the Liked button just notifies you to
-use ncspot or point the slot at a playlist. Any slot URI of `liked` (or a
-`spotify:collection[:tracks]` URI) is treated as Liked Songs.
-
-## Soundtracks (configurable slots)
-
-The panel has up to three soundtrack buttons. Click the **⚙ Edit** button in the
-panel to rename each slot and set its **Spotify playlist/album URI** (in Spotify:
-right-click → Share → Copy Spotify URI). Defaults: **Lofi**, **Nature**, and
-**Liked** (your ncspot Liked Songs — see above); clear a slot's URI to hide it. Set
-the **volume** with the panel slider — applied on start, restored on stop.
-
-## Site blocking (one-time setup)
-
-Editing `/etc/hosts` needs root, so blocking is opt-in. Run once:
-
-```sh
-cd ~/.config/omarchy/plugins/io.github.keegan-sucks.flowstate/scripts
-sudo ./install-blocker.sh
-```
-
-This installs a small root-owned helper (`/usr/local/bin/flowstate-hosts`) and a
-scoped `NOPASSWD` sudoers rule so the plugin can toggle blocking without a
-password. Everything else works without it; if blocking isn't set up, the plugin
-skips it and notifies you. Remove with `sudo ./install-blocker.sh --uninstall`.
-
-The blocklist is **bundled and categorized** (`blocklists/*.txt`): Social, Video,
-Shopping, News & forums (incl. Reddit), and Adult (off by default). Toggle
-categories and add extra domains in the panel's Edit view.
-
-## Keep the player out of the way (optional)
-
-To always open the music player on a far-off workspace (default 9, silently):
-
-```sh
-cd ~/.config/omarchy/plugins/io.github.keegan-sucks.flowstate/scripts
-./install-workspace-rule.sh 9      # adds a Hyprland window rule; --uninstall to remove
-```
-
-(Only applies when Flowstate launches the player itself; if it's already running,
-it's left where it is.)
-
-## Usage
-
-- **Left-click** the widget: open the panel. **Middle-click**: start/pause.
-  **Right-click**: reset.
-- In the panel: pick Stopwatch or Pomodoro, tune the Pomodoro cycle, choose a
-  soundtrack, set the volume, and toggle **Focus effects** (the master switch).
-- **⚙ Edit** in the panel: rename/set soundtrack URIs, toggle block categories,
-  add extra domains.
-- Keyboard (panel focused): `Space` start/pause · `R` reset · `1`/`2` mode ·
-  `S` skip Pomodoro phase.
-
-## Settings
-
-Editable in the widget settings, or `omarchy bar set io.github.keegan-sucks.flowstate <key> <value>`:
-
-| Key | Default | Meaning |
-|-----|---------|---------|
-| `focusEffects` | `true` | Master switch for all side-effects |
-| `musicPlayer` | `auto` | `auto` (prefer ncspot), `ncspot`, or `spotify` |
-| `alwaysShuffle` | `true` | Shuffle on start (honored by ncspot) |
-| `slot1Label` / `slot1Uri` | Lofi | First soundtrack name + Spotify URI |
-| `slot2Label` / `slot2Uri` | Nature | Second soundtrack |
-| `slot3Label` / `slot3Uri` | Liked / `liked` | Third soundtrack; `liked` = ncspot Liked Songs |
-| `activeSlot` | `0` | Selected soundtrack index |
-| `spotifyVolume` | `40` | Focus volume (0–100); previous volume restored on stop |
-| `spotifyWorkspace` | `9` | Workspace to place the player on (needs the window rule) |
-| `blockSites` | `true` | Toggle site blocking |
-| `catSocial`/`catVideo`/`catShopping`/`catNews` | `true` | Blocklist categories |
-| `catAdult` | `false` | Adult category |
-| `extraDomains` | (empty) | Extra comma/newline-separated domains |
-| `openSpotify` | `true` | Open the music player on start |
-| `openObsidian` | `true` | Open Obsidian on start |
-| `pomodoroWorkMinutes` / `pomodoroShortBreakMinutes` / `pomodoroCycles` / `pomodoroLongBreakMinutes` | 25 / 5 / 4 / 15 | Pomodoro cycle |
-| `pomodoroSound` | `true` | Bells between phases / at completion |
-
-## Scripting (IPC)
-
-```sh
-id=io.github.keegan-sucks.flowstate
-omarchy-shell "$id" status
-omarchy-shell "$id" stopwatch
-omarchy-shell "$id" pomodoro 25 5 4 15
-omarchy-shell "$id" start        # pause | toggleTimer | skip | reset
-omarchy-shell "$id" open         # close | toggle
-```
-
-## Dependencies
-
-`ncspot` (recommended) or `spotify`, `obsidian`, `dbus-send` (MPRIS), `pactl`
-(per-app volume), `pgrep`, `resolvectl`, `socat`/`nc` (for ncspot Liked Songs), and Omarchy's `omarchy-notification-send`
-/ `pw-play`. Requires the Omarchy Quattro shell + Hyprland.
+---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE) © keegan-sucks

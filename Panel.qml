@@ -24,7 +24,7 @@ Panel {
   function resetTimer() { Core.FocusState.reset() }
 
   // Persist a settings delta back into this widget's shell.json entry, so
-  // choices made in the panel survive a shell restart. Mirrors Clockwork.
+  // choices made in the panel survive a shell restart.
   function persistSettings(values) {
     var entry = { id: root.moduleName }
     for (var existing in root.settings) if (existing !== "id") entry[existing] = root.settings[existing]
@@ -36,7 +36,7 @@ Panel {
       root.bar.shell.updateEntryInline(root.moduleName, entry)
   }
 
-  // Whether the soundtrack/blocklist editor is open in the panel.
+  // Whether the soundtrack / cycle / blocklist editor is open in the panel.
   property bool editing: false
 
   function chooseSlot(index) {
@@ -126,8 +126,10 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(400))
-    contentHeight: panel.fittedContentHeight(panelColumn.implicitHeight, Style.space(640))
+    contentWidth: panel.fittedContentWidth(Style.space(380))
+    // No fixed cap: fit to content, growing only up to what the screen allows,
+    // so the everyday panel never needs to scroll.
+    contentHeight: panel.fittedContentHeight(panelColumn.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -141,11 +143,9 @@ Panel {
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(text) {
-        if (text === "1") Core.FocusState.selectMode(Core.FocusState.stopwatchMode)
-        else if (text === "2") Core.FocusState.selectMode(Core.FocusState.pomodoroMode)
-        else if (text === "r" || text === "R") root.resetTimer()
-        else if ((text === "s" || text === "S") && Core.FocusState.mode === Core.FocusState.pomodoroMode)
-          Core.FocusState.skipPomodoroPhase()
+        if (text === "r" || text === "R") root.resetTimer()
+        else if (text === "s" || text === "S") Core.FocusState.skipPomodoroPhase()
+        else if (text === "e" || text === "E") root.editing = !root.editing
       }
 
       ScrollView {
@@ -164,60 +164,80 @@ Panel {
         Column {
           id: panelColumn
           width: scrollArea.availableWidth
-          spacing: Style.space(14)
+          spacing: Style.space(12)
 
           PanelHero {
             width: parent.width
             iconComponent: timerIcon
             title: "Flowstate"
-            meta: Core.FocusState.modeName + " · " + Core.FocusState.statusText
+            meta: Core.FocusState.statusText
             foreground: root.contentForeground
             fontFamily: root.contentFontFamily
           }
 
-          PanelSeparator { foreground: root.contentForeground }
-
-          // ---- Mode selector -------------------------------------------------
+          // ---- Transport controls, at the top so Start is always reachable
+          //      without scrolling. Hidden while editing settings.
           Row {
-            id: modeRow
             width: parent.width
-            spacing: Style.space(6)
+            spacing: Style.space(8)
+            visible: !root.editing
 
-            readonly property var modes: [
-              { label: "Stopwatch", value: Core.FocusState.stopwatchMode },
-              { label: "Pomodoro", value: Core.FocusState.pomodoroMode }
-            ]
-            readonly property real cellWidth: (width - spacing * (modes.length - 1)) / modes.length
+            Button {
+              width: Math.max(0, parent.width - resetButton.width
+                - (skipButton.visible ? skipButton.width + parent.spacing : 0)
+                - parent.spacing)
+              text: Core.FocusState.running
+                ? "Pause"
+                : Core.FocusState.completed ? "Start again" : "Start"
+              iconText: Core.FocusState.running ? "Ⅱ" : "▶"
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              bordered: true
+              active: Core.FocusState.running
+              onClicked: root.startPause()
+            }
 
-            Repeater {
-              model: modeRow.modes
-              Button {
-                required property var modelData
-                width: modeRow.cellWidth
-                text: modelData.label
-                fontSize: Style.font.bodySmall
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                bordered: true
-                active: Core.FocusState.mode === modelData.value
-                enabled: !Core.FocusState.running && !Core.FocusState.pomodoroSessionStarted
-                opacity: enabled ? 1 : 0.5
-                onClicked: Core.FocusState.selectMode(modelData.value)
-              }
+            Button {
+              id: skipButton
+              visible: Core.FocusState.pomodoroSessionStarted && !Core.FocusState.completed
+              text: "Skip"
+              iconText: "»"
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              bordered: true
+              onClicked: Core.FocusState.skipPomodoroPhase()
+            }
+
+            Button {
+              id: resetButton
+              text: "Reset"
+              iconText: "↻"
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              bordered: true
+              enabled: Core.FocusState.running
+                || Core.FocusState.storedElapsedMs > 0
+                || Core.FocusState.completed
+                || Core.FocusState.pomodoroSessionStarted
+              opacity: enabled ? 1 : 0.5
+              onClicked: root.resetTimer()
             }
           }
 
-          // ---- Big time display + status ------------------------------------
+          PanelSeparator { foreground: root.contentForeground }
+
+          // ---- Big time display + status (hidden while editing settings) ----
           Column {
             width: parent.width
-            spacing: Style.space(8)
+            spacing: Style.space(6)
+            visible: !root.editing
 
             Text {
               width: parent.width
               text: Core.FocusState.displayText
               color: root.contentForeground
               font.family: root.contentFontFamily
-              font.pixelSize: Style.font.displayLarge * 2
+              font.pixelSize: Math.round(Style.font.displayLarge * 1.5)
               font.bold: true
               horizontalAlignment: Text.AlignHCenter
             }
@@ -234,11 +254,11 @@ Panel {
             }
           }
 
-          // ---- Progress bar (Pomodoro only) ---------------------------------
+          // ---- Progress bar -------------------------------------------------
           Item {
-            visible: Core.FocusState.mode === Core.FocusState.pomodoroMode
             width: parent.width
-            implicitHeight: visible ? Style.space(7) : 0
+            visible: !root.editing
+            implicitHeight: Style.space(7)
 
             Rectangle {
               anchors.fill: parent
@@ -259,42 +279,16 @@ Panel {
             }
           }
 
-          // ---- Pomodoro configuration ---------------------------------------
-          Column {
-            visible: Core.FocusState.mode === Core.FocusState.pomodoroMode
+          // ---- Cycle progress dots + summary (read-out; edit under ⚙) --------
+          Item {
             width: parent.width
-            spacing: Style.space(10)
-
-            Item {
-              width: parent.width
-              implicitHeight: Math.max(pomodoroHeader.implicitHeight, pomodoroSummary.implicitHeight)
-
-              PanelSectionHeader {
-                id: pomodoroHeader
-                text: "POMODORO CYCLE"
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-              }
-
-              Text {
-                id: pomodoroSummary
-                text: Core.FocusState.pomodoroWorkMinutes + " / "
-                  + Core.FocusState.pomodoroShortBreakMinutes + " × "
-                  + Core.FocusState.pomodoroCycles + " · "
-                  + Core.FocusState.pomodoroLongBreakMinutes + " long"
-                color: Qt.darker(root.contentForeground, 1.4)
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
+            visible: !root.editing
+            implicitHeight: Math.max(cycleDots.implicitHeight, cycleSummary.implicitHeight)
 
             Row {
-              anchors.horizontalCenter: parent.horizontalCenter
+              id: cycleDots
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(7)
 
               Repeater {
@@ -304,6 +298,7 @@ Panel {
                   width: Style.space(8)
                   height: width
                   radius: width / 2
+                  anchors.verticalCenter: parent.verticalCenter
                   color: index < Core.FocusState.pomodoroCompletedCycles
                     ? Color.accent
                     : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.24)
@@ -311,86 +306,18 @@ Panel {
               }
             }
 
-            Row {
-              width: parent.width
-              spacing: Style.space(10)
-
-              CompactField {
-                id: workField
-                width: (parent.width - parent.spacing) / 2
-                fieldWidth: width
-                label: "Focus minutes"
-                from: 1
-                to: 999
-                value: Core.FocusState.pomodoroWorkMinutes
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                enabled: root.canEdit
-                opacity: enabled ? 1 : 0.5
-                onModified: function(value) { root.setPomodoroField("work", value) }
-              }
-
-              CompactField {
-                id: shortField
-                width: (parent.width - parent.spacing) / 2
-                fieldWidth: width
-                label: "Short break"
-                from: 1
-                to: 999
-                value: Core.FocusState.pomodoroShortBreakMinutes
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                enabled: root.canEdit
-                opacity: enabled ? 1 : 0.5
-                onModified: function(value) { root.setPomodoroField("short", value) }
-              }
-            }
-
-            Row {
-              width: parent.width
-              spacing: Style.space(10)
-
-              CompactField {
-                id: cyclesField
-                width: (parent.width - parent.spacing) / 2
-                fieldWidth: width
-                label: "Focus cycles"
-                from: 1
-                to: 99
-                value: Core.FocusState.pomodoroCycles
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                enabled: root.canEdit
-                opacity: enabled ? 1 : 0.5
-                onModified: function(value) { root.setPomodoroField("cycles", value) }
-              }
-
-              CompactField {
-                id: longField
-                width: (parent.width - parent.spacing) / 2
-                fieldWidth: width
-                label: "Long break"
-                from: 1
-                to: 999
-                value: Core.FocusState.pomodoroLongBreakMinutes
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                enabled: root.canEdit
-                opacity: enabled ? 1 : 0.5
-                onModified: function(value) { root.setPomodoroField("long", value) }
-              }
-            }
-
-            Toggle {
-              width: parent.width
-              label: "Pomodoro sounds"
-              description: "Bell between phases and three bells when the cycle ends"
-              checked: Core.FocusState.pomodoroSoundEnabled
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              enabled: root.canEdit
-              opacity: enabled ? 1 : 0.5
-              onClicked: if (enabled) root.setPomodoroField("sound", !Core.FocusState.pomodoroSoundEnabled)
+            Text {
+              id: cycleSummary
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              text: Core.FocusState.pomodoroWorkMinutes + " / "
+                + Core.FocusState.pomodoroShortBreakMinutes + " × "
+                + Core.FocusState.pomodoroCycles + " · "
+                + Core.FocusState.pomodoroLongBreakMinutes + " long"
+              color: Qt.darker(root.contentForeground, 1.4)
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
             }
           }
 
@@ -435,15 +362,6 @@ Panel {
               spacing: Style.space(10)
               visible: !root.editing
 
-              Text {
-                width: parent.width
-                text: "Starting a timer blocks distracting sites, plays your Spotify soundtrack, and opens Obsidian."
-                color: Qt.darker(root.contentForeground, 1.4)
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-                wrapMode: Text.WordWrap
-              }
-
               Row {
                 id: soundRow
                 width: parent.width
@@ -478,68 +396,23 @@ Panel {
                 }
               }
 
-              Column {
+              Text {
                 width: parent.width
-                spacing: Style.space(4)
-                enabled: Core.FocusState.focusEffects
-                opacity: enabled ? 1 : 0.5
-
-                Item {
-                  width: parent.width
-                  implicitHeight: Math.max(volHeader.implicitHeight, volValue.implicitHeight)
-
-                  PanelSectionHeader {
-                    id: volHeader
-                    text: "VOLUME"
-                    foreground: root.contentForeground
-                    fontFamily: root.contentFontFamily
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-
-                  Text {
-                    id: volValue
-                    text: Core.FocusState.spotifyVolume + "%"
-                    color: Qt.darker(root.contentForeground, 1.4)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    font.bold: true
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                }
-
-                PanelSlider {
-                  width: parent.width
-                  bar: root.bar
-                  minimum: 0
-                  maximum: 100
-                  step: 5
-                  integer: true
-                  value: Core.FocusState.spotifyVolume
-                  onMoved: function(v) { Core.FocusState.setSpotifyVolume(v) }
-                  onReleased: function(v) {
-                    Core.FocusState.setSpotifyVolume(v)
-                    root.persistSettings({ spotifyVolume: Core.FocusState.spotifyVolume })
-                  }
-                }
-              }
-
-              Toggle {
-                width: parent.width
-                label: "Focus effects"
-                description: "Block sites, play Spotify, and open Obsidian when a session starts"
-                checked: Core.FocusState.focusEffects
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                onClicked: root.setFocusEffects(!Core.FocusState.focusEffects)
+                text: Core.FocusState.focusEffects
+                  ? "Volume, sounds & options in ⚙ Edit"
+                  : "Focus effects are off — Spotify, Obsidian and blocking won't run"
+                color: Qt.darker(root.contentForeground, 1.4)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
               }
             }
 
-            // ===== Edit view =====
+            // ===== Edit view (settings) — kept compact so it never scrolls ==
             Column {
               width: parent.width
-              spacing: Style.space(10)
+              spacing: Style.space(8)
               visible: root.editing
 
               PanelSectionHeader {
@@ -572,7 +445,7 @@ Panel {
                   TextField {
                     width: parent.width - labelField.width - parent.spacing
                     text: Core.FocusState.slotUri(slotRow.index)
-                    placeholderText: "spotify:playlist:…  (empty to hide)"
+                    placeholderText: "spotify:playlist:… , share URL, or 'liked'"
                     foreground: root.contentForeground
                     font.family: root.contentFontFamily
                     onEditingFinished: root.setSlotUri(slotRow.index, text)
@@ -581,6 +454,149 @@ Panel {
                     Keys.onEscapePressed: focus = false
                   }
                 }
+              }
+
+              // ---- Volume + master switch (moved here from the main view) ----
+              Item {
+                width: parent.width
+                implicitHeight: Math.max(volHeader.implicitHeight, volValue.implicitHeight)
+                enabled: Core.FocusState.focusEffects
+                opacity: enabled ? 1 : 0.5
+
+                PanelSectionHeader {
+                  id: volHeader
+                  text: "VOLUME"
+                  foreground: root.contentForeground
+                  fontFamily: root.contentFontFamily
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                  id: volValue
+                  text: Core.FocusState.spotifyVolume + "%"
+                  color: Qt.darker(root.contentForeground, 1.4)
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+              }
+
+              PanelSlider {
+                width: parent.width
+                bar: root.bar
+                minimum: 0
+                maximum: 100
+                step: 5
+                integer: true
+                enabled: Core.FocusState.focusEffects
+                opacity: enabled ? 1 : 0.5
+                value: Core.FocusState.spotifyVolume
+                onMoved: function(v) { Core.FocusState.setSpotifyVolume(v) }
+                onReleased: function(v) {
+                  Core.FocusState.setSpotifyVolume(v)
+                  root.persistSettings({ spotifyVolume: Core.FocusState.spotifyVolume })
+                }
+              }
+
+              Toggle {
+                width: parent.width
+                label: "Focus effects"
+                description: "Block sites, play Spotify, isolate Obsidian when a session starts"
+                checked: Core.FocusState.focusEffects
+                foreground: root.contentForeground
+                fontFamily: root.contentFontFamily
+                onClicked: root.setFocusEffects(!Core.FocusState.focusEffects)
+              }
+
+              PanelSectionHeader {
+                text: "POMODORO CYCLE"
+                foreground: root.contentForeground
+                fontFamily: root.contentFontFamily
+              }
+
+              Row {
+                width: parent.width
+                spacing: Style.space(10)
+
+                CompactField {
+                  id: workField
+                  width: (parent.width - parent.spacing) / 2
+                  fieldWidth: width
+                  label: "Focus minutes"
+                  from: 1
+                  to: 999
+                  value: Core.FocusState.pomodoroWorkMinutes
+                  foreground: root.contentForeground
+                  fontFamily: root.contentFontFamily
+                  enabled: root.canEdit
+                  opacity: enabled ? 1 : 0.5
+                  onModified: function(value) { root.setPomodoroField("work", value) }
+                }
+
+                CompactField {
+                  id: shortField
+                  width: (parent.width - parent.spacing) / 2
+                  fieldWidth: width
+                  label: "Short break"
+                  from: 1
+                  to: 999
+                  value: Core.FocusState.pomodoroShortBreakMinutes
+                  foreground: root.contentForeground
+                  fontFamily: root.contentFontFamily
+                  enabled: root.canEdit
+                  opacity: enabled ? 1 : 0.5
+                  onModified: function(value) { root.setPomodoroField("short", value) }
+                }
+              }
+
+              Row {
+                width: parent.width
+                spacing: Style.space(10)
+
+                CompactField {
+                  id: cyclesField
+                  width: (parent.width - parent.spacing) / 2
+                  fieldWidth: width
+                  label: "Focus cycles"
+                  from: 1
+                  to: 99
+                  value: Core.FocusState.pomodoroCycles
+                  foreground: root.contentForeground
+                  fontFamily: root.contentFontFamily
+                  enabled: root.canEdit
+                  opacity: enabled ? 1 : 0.5
+                  onModified: function(value) { root.setPomodoroField("cycles", value) }
+                }
+
+                CompactField {
+                  id: longField
+                  width: (parent.width - parent.spacing) / 2
+                  fieldWidth: width
+                  label: "Long break"
+                  from: 1
+                  to: 999
+                  value: Core.FocusState.pomodoroLongBreakMinutes
+                  foreground: root.contentForeground
+                  fontFamily: root.contentFontFamily
+                  enabled: root.canEdit
+                  opacity: enabled ? 1 : 0.5
+                  onModified: function(value) { root.setPomodoroField("long", value) }
+                }
+              }
+
+              Toggle {
+                width: parent.width
+                label: "Pomodoro sounds"
+                description: "Bell between phases and three bells when the cycle ends"
+                checked: Core.FocusState.pomodoroSoundEnabled
+                foreground: root.contentForeground
+                fontFamily: root.contentFontFamily
+                enabled: root.canEdit
+                opacity: enabled ? 1 : 0.5
+                onClicked: if (enabled) root.setPomodoroField("sound", !Core.FocusState.pomodoroSoundEnabled)
               }
 
               PanelSectionHeader {
@@ -628,66 +644,6 @@ Panel {
             }
           }
 
-          PanelSeparator { foreground: root.contentForeground }
-
-          // ---- Transport controls -------------------------------------------
-          Row {
-            width: parent.width
-            spacing: Style.space(8)
-
-            Button {
-              width: Math.max(0, parent.width - resetButton.width
-                - (skipButton.visible ? skipButton.width + parent.spacing : 0)
-                - parent.spacing)
-              text: Core.FocusState.running
-                ? "Pause"
-                : Core.FocusState.completed ? "Start again" : "Start"
-              iconText: Core.FocusState.running ? "Ⅱ" : "▶"
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              bordered: true
-              active: Core.FocusState.running
-              onClicked: root.startPause()
-            }
-
-            Button {
-              id: skipButton
-              visible: Core.FocusState.mode === Core.FocusState.pomodoroMode
-                && Core.FocusState.pomodoroSessionStarted
-                && !Core.FocusState.completed
-              text: "Skip"
-              iconText: "»"
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              bordered: true
-              onClicked: Core.FocusState.skipPomodoroPhase()
-            }
-
-            Button {
-              id: resetButton
-              text: "Reset"
-              iconText: "↻"
-              foreground: root.contentForeground
-              fontFamily: root.contentFontFamily
-              bordered: true
-              enabled: Core.FocusState.running
-                || Core.FocusState.storedElapsedMs > 0
-                || Core.FocusState.completed
-                || Core.FocusState.pomodoroSessionStarted
-              opacity: enabled ? 1 : 0.5
-              onClicked: root.resetTimer()
-            }
-          }
-
-          Text {
-            width: parent.width
-            text: "Space start/pause   ·   R reset   ·   1/2 mode" +
-              (Core.FocusState.mode === Core.FocusState.pomodoroMode ? "   ·   S skip" : "")
-            color: Qt.darker(root.contentForeground, 1.4)
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.caption
-            horizontalAlignment: Text.AlignHCenter
-          }
         }
       }
     }

@@ -1,14 +1,23 @@
-# Streaming video / time-sink watching. The session script adds www. variants.
+# Video streaming (curated distraction blocker)
+# One domain per line; edit freely. www.* is added automatically at block time.
 youtube.com
 m.youtube.com
+youtu.be
 music.youtube.com
 netflix.com
 twitch.tv
 hulu.com
 disneyplus.com
-max.com
 hbomax.com
+max.com
 primevideo.com
 vimeo.com
 dailymotion.com
 crunchyroll.com
+funimation.com
+peacocktv.com
+paramountplus.com
+tubitv.com
+pluto.tv
+rumble.com
+kick.com

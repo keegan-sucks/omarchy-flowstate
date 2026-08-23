@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.keegan-sucks.flowstate",
   "name": "Flowstate",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": "keegan-sucks",
   "license": "MIT",
-  "description": "A focus timer (Stopwatch + Pomodoro) that blocks distracting sites, starts a Spotify focus soundtrack at the right volume, and opens Obsidian when you begin a session.",
+  "description": "A Pomodoro focus timer that blocks distracting sites, plays a shuffled Spotify soundtrack (incl. your Liked Songs) via spotify_player, and isolates Obsidian on its own workspace when you begin a session.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,10 +14,10 @@
   },
   "barWidget": {
     "displayName": "Flowstate",
-    "description": "Stopwatch + Pomodoro focus timer with site blocking, Spotify, and Obsidian",
+    "description": "Pomodoro focus timer with site blocking, Spotify, and Obsidian",
     "category": "Time",
     "allowMultiple": false,
-    "defaultSection": "right",
+    "defaultSection": "center",
     "schema": [
       {
         "key": "focusEffects",
@@ -36,8 +36,8 @@
       {
         "key": "slot1Uri",
         "type": "string",
-        "label": "Soundtrack 1 Spotify URI",
-        "description": "Spotify playlist/album URI for the first soundtrack (right-click in Spotify -> Share -> Copy Spotify URI).",
+        "label": "Soundtrack 1 Spotify URI/URL",
+        "description": "Spotify playlist/album/artist link for the first soundtrack. Paste a share link or a spotify:playlist:… URI, or the keyword 'liked' for your Liked Songs.",
         "defaultValue": "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"
       },
       {
@@ -50,8 +50,8 @@
       {
         "key": "slot2Uri",
         "type": "string",
-        "label": "Soundtrack 2 Spotify URI",
-        "description": "Spotify playlist/album URI for the second soundtrack.",
+        "label": "Soundtrack 2 Spotify URI/URL",
+        "description": "Spotify playlist/album/artist link for the second soundtrack.",
         "defaultValue": "spotify:playlist:37i9dQZF1DX4PP3DA4J0N8"
       },
       {
@@ -64,8 +64,8 @@
       {
         "key": "slot3Uri",
         "type": "string",
-        "label": "Soundtrack 3 Spotify URI",
-        "description": "Spotify playlist/album URI, or the keyword 'liked' to play your ncspot Liked Songs. Leave empty to hide this button.",
+        "label": "Soundtrack 3 Spotify URI/URL",
+        "description": "Spotify link, or the keyword 'liked' to play your Liked Songs (shuffled). Leave empty to hide this button.",
         "defaultValue": "liked"
       },
       {
@@ -73,14 +73,21 @@
         "type": "number",
         "label": "Active soundtrack",
         "description": "Which soundtrack is selected (0, 1, or 2). Also switchable in the panel.",
-        "defaultValue": 0
+        "defaultValue": 2
       },
       {
         "key": "spotifyVolume",
         "type": "number",
         "label": "Focus volume (%)",
         "description": "Volume Spotify is set to during a session (0-100). Tunable via the panel slider; the pre-session volume is restored when the session ends.",
-        "defaultValue": 40
+        "defaultValue": 35
+      },
+      {
+        "key": "alwaysShuffle",
+        "type": "boolean",
+        "label": "Always shuffle",
+        "description": "Shuffle the soundtrack when a session starts.",
+        "defaultValue": true
       },
       {
         "key": "blockSites",
@@ -93,7 +100,7 @@
         "key": "catSocial",
         "type": "boolean",
         "label": "Block: Social media",
-        "description": "Facebook, Instagram, X/Twitter, TikTok, etc.",
+        "description": "Facebook, Instagram, X/Twitter, TikTok, Reddit, etc.",
         "defaultValue": true
       },
       {
@@ -114,7 +121,7 @@
         "key": "catNews",
         "type": "boolean",
         "label": "Block: News & forums",
-        "description": "Reddit, Hacker News, Quora, major news sites, etc.",
+        "description": "News aggregators, Hacker News, Quora, major news sites, etc.",
         "defaultValue": true
       },
       {
@@ -135,41 +142,36 @@
         "key": "openSpotify",
         "type": "boolean",
         "label": "Open Spotify",
-        "description": "Launch Spotify (if needed) and start the soundtrack when a session begins.",
+        "description": "Launch spotify_player (if needed) and start the soundtrack when a session begins.",
         "defaultValue": true
       },
       {
         "key": "openObsidian",
         "type": "boolean",
         "label": "Open Obsidian",
-        "description": "Launch Obsidian (if it is not already open) when a session begins.",
+        "description": "Launch/focus Obsidian on the focus workspace when a session begins.",
         "defaultValue": true
+      },
+      {
+        "key": "isolateObsidian",
+        "type": "boolean",
+        "label": "Obsidian alone on workspace",
+        "description": "Move every other window off the focus workspace (into a hidden 'parked' special workspace) so Obsidian is the only window there. Restored when the session ends.",
+        "defaultValue": true
+      },
+      {
+        "key": "focusWorkspace",
+        "type": "number",
+        "label": "Focus (Obsidian) workspace",
+        "description": "Workspace to put Obsidian on and focus. 0 = whichever workspace is active when the session starts.",
+        "defaultValue": 0
       },
       {
         "key": "spotifyWorkspace",
         "type": "number",
         "label": "Music workspace",
-        "description": "Workspace to open the music player on (silently, out of the way). 0 disables placement. Requires the window rule from scripts/install-workspace-rule.sh.",
+        "description": "Workspace to open spotify_player on (silently, out of the way). 0 disables placement. Flowstate places the window with hyprctl — no Hyprland window rule required.",
         "defaultValue": 9
-      },
-      {
-        "key": "musicPlayer",
-        "type": "select",
-        "label": "Music player",
-        "description": "Which Spotify client to use. ncspot supports shuffle; the official client does not.",
-        "defaultValue": "auto",
-        "options": [
-          { "value": "auto", "label": "Auto (prefer ncspot)" },
-          { "value": "ncspot", "label": "ncspot" },
-          { "value": "spotify", "label": "Official Spotify" }
-        ]
-      },
-      {
-        "key": "alwaysShuffle",
-        "type": "boolean",
-        "label": "Always shuffle",
-        "description": "Shuffle the soundtrack when a session starts (honored by ncspot; the official Spotify client ignores it).",
-        "defaultValue": true
       },
       {
         "key": "pomodoroWorkMinutes",

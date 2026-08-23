@@ -1,4 +1,5 @@
-# Online shopping. The session script adds www. variants.
+# Shopping (curated distraction blocker)
+# One domain per line; edit freely. www.* is added automatically at block time.
 amazon.com
 smile.amazon.com
 ebay.com
@@ -12,3 +13,10 @@ temu.com
 shein.com
 newegg.com
 wayfair.com
+ikea.com
+costco.com
+homedepot.com
+lowes.com
+craigslist.org
+alibaba.com
+zappos.com

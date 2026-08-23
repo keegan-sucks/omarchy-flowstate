@@ -3,11 +3,13 @@ pragma Singleton
 import QtQuick
 import Quickshell
 
-// Shared, long-lived timer + focus-session state. Modeled on Clockwork's
-// TimerState but trimmed to two modes (Stopwatch, Pomodoro) and extended with
-// the "focus session" orchestration: when a session starts we shell out to
-// scripts/flowstate-session.sh to block sites, start Spotify, and open
-// Obsidian; when it ends we unblock and pause Spotify.
+// Shared, long-lived Pomodoro timer + focus-session state. (The mode field is
+// retained internally but locked to Pomodoro — there is no Stopwatch anymore.)
+// Plus the "focus session" orchestration: when a session starts we shell out to
+// scripts/flowstate-session.sh to block sites, start Spotify (spotify_player)
+// and isolate Obsidian on its own workspace; when it ends we unblock, restore
+// the previous Spotify volume and pause, and un-park the windows we moved off
+// the focus workspace.
 Item {
   id: root
 
@@ -38,16 +40,17 @@ Item {
   property bool focusEffects: true
 
   // Soundtrack slots — each an editable {label, uri}, chosen/edited in the
-  // panel. Slot 3 is empty by default and hidden until the user configures it.
+  // panel. A URI of "liked" plays your Liked Songs (shuffled).
   property string slot1Label: "Lofi"
   property string slot1Uri: "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"
   property string slot2Label: "Nature"
   property string slot2Uri: "spotify:playlist:37i9dQZF1DX4PP3DA4J0N8"
   property string slot3Label: "Liked"
-  property string slot3Uri: "liked"             // sentinel: ncspot Liked Songs (see script)
-  property int activeSlot: 0                    // 0-based index of the chosen slot
+  property string slot3Uri: "liked"            // sentinel: your Liked Songs
+  property int activeSlot: 2                    // 0-based index of the chosen slot
 
-  property int spotifyVolume: 40
+  property int spotifyVolume: 35
+  property bool alwaysShuffle: true
 
   // Blocklist categories (domains come from the bundled blocklists/*.txt).
   property bool blockSites: true
@@ -58,11 +61,11 @@ Item {
   property bool catAdult: false
   property string extraDomains: ""
 
-  property bool openSpotify: true              // open the music player on start
+  property bool openSpotify: true              // open spotify_player on start
   property bool openObsidian: true
+  property bool isolateObsidian: true          // park other windows off the focus ws
+  property int focusWorkspace: 0               // 0 = current active workspace
   property int spotifyWorkspace: 9             // 0 disables the placement
-  property string musicPlayer: "auto"          // auto | ncspot | spotify
-  property bool alwaysShuffle: true            // honored by ncspot
 
   // True while a focus session's side-effects are engaged. Stays true across
   // pauses and breaks — released only on reset() or full completion.
@@ -335,6 +338,7 @@ Item {
     return c.join(",")
   }
 
+  // NOTE: argument order MUST match scripts/flowstate-session.sh.
   function runSession(action) {
     Quickshell.execDetached([
       "bash", sessionScript, action,
@@ -343,7 +347,8 @@ Item {
       openSpotify ? "1" : "0",
       openObsidian ? "1" : "0",
       focusCategoriesCsv(), String(extraDomains),
-      String(spotifyWorkspace), String(musicPlayer),
+      String(spotifyWorkspace), String(focusWorkspace),
+      isolateObsidian ? "1" : "0",
       alwaysShuffle ? "1" : "0"
     ])
   }
