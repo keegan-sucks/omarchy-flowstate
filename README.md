@@ -48,7 +48,7 @@ every short and long break — releasing them only when you **stop** or the cycl
 |---|---|---|
 | 🧘 | **Isolate Obsidian** | Launches or focuses Obsidian on your focus workspace and parks every *other* window out of sight, so Obsidian is the only thing in front of you. |
 | 🎧 | **Play a soundtrack** | Starts `spotify_player` on a far-off workspace (default **9**), shuffled, at a quiet volume — including your **Liked Songs**. |
-| 🚫 | **Block distractions** | Adds curated blocklists (social, video, shopping, news; adult optional) to `/etc/hosts` for the duration of the session. |
+| 🚫 | **Block distractions** | Adds curated blocklists (social, video, shopping, news, adult) to `/etc/hosts` for the duration of the session. |
 | ⏱️ | **Run the Pomodoro** | Configurable focus / short-break / long-break lengths and cycle count, with optional bells between phases. |
 
 When the session ends, Flowstate **unblocks** the sites, **restores** Spotify's
@@ -144,7 +144,7 @@ The blocklist is **bundled and categorized** in `blocklists/*.txt`:
 | Category | Source |
 |---|---|
 | Social | [StevenBlack `alternates/social-only`](https://github.com/StevenBlack/hosts) |
-| Adult | [StevenBlack `alternates/porn-only`](https://github.com/StevenBlack/hosts) — *off by default* |
+| Adult | [StevenBlack `alternates/porn-only`](https://github.com/StevenBlack/hosts) |
 | Video / Shopping / News | Curated, high-signal lists |
 
 Toggle categories and add your own domains from the panel's **⚙ Edit** view, or
@@ -220,7 +220,7 @@ omarchy bar set io.github.keegan-sucks.flowstate <key> <value>
 | `spotifyWorkspace` | `9` | Workspace to place `spotify_player` on (`0` disables placement) |
 | `blockSites` | `true` | Toggle site blocking |
 | `catSocial` / `catVideo` / `catShopping` / `catNews` | `true` | Blocklist categories |
-| `catAdult` | `false` | Adult category |
+| `catAdult` | `true` | Adult category |
 | `extraDomains` | *(empty)* | Extra comma/newline-separated domains to block |
 | `pomodoroWorkMinutes` | `25` | Length of each focus phase |
 | `pomodoroShortBreakMinutes` | `5` | Short break length |

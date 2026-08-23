@@ -128,8 +128,8 @@
         "key": "catAdult",
         "type": "boolean",
         "label": "Block: Adult",
-        "description": "Adult content sites. Off by default.",
-        "defaultValue": false
+        "description": "Adult content sites.",
+        "defaultValue": true
       },
       {
         "key": "extraDomains",
