@@ -1,0 +1,14 @@
+# Streaming video / time-sink watching. The session script adds www. variants.
+youtube.com
+m.youtube.com
+music.youtube.com
+netflix.com
+twitch.tv
+hulu.com
+disneyplus.com
+max.com
+hbomax.com
+primevideo.com
+vimeo.com
+dailymotion.com
+crunchyroll.com

@@ -1,0 +1,16 @@
+# News, forums, and aggregators (the classic rabbit holes). www. added by script.
+reddit.com
+old.reddit.com
+np.reddit.com
+news.ycombinator.com
+quora.com
+imgur.com
+9gag.com
+buzzfeed.com
+cnn.com
+foxnews.com
+nytimes.com
+washingtonpost.com
+theguardian.com
+dailymail.co.uk
+huffpost.com

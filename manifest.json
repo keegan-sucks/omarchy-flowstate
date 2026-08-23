@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.gopher-boats.flowstate",
+  "name": "Flowstate",
+  "version": "0.1.0",
+  "author": "gopher-boats",
+  "license": "MIT",
+  "description": "A focus timer (Stopwatch + Pomodoro) that blocks distracting sites, starts a Spotify focus soundtrack at the right volume, and opens Obsidian when you begin a session.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Flowstate",
+    "description": "Stopwatch + Pomodoro focus timer with site blocking, Spotify, and Obsidian",
+    "category": "Time",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "schema": [
+      {
+        "key": "focusEffects",
+        "type": "boolean",
+        "label": "Focus effects",
+        "description": "Master switch: run the blocking / Spotify / Obsidian actions when a session starts. Turn off to use the timer on its own.",
+        "defaultValue": true
+      },
+      {
+        "key": "slot1Label",
+        "type": "string",
+        "label": "Soundtrack 1 name",
+        "description": "Label for the first soundtrack button.",
+        "defaultValue": "Lofi"
+      },
+      {
+        "key": "slot1Uri",
+        "type": "string",
+        "label": "Soundtrack 1 Spotify URI",
+        "description": "Spotify playlist/album URI for the first soundtrack (right-click in Spotify -> Share -> Copy Spotify URI).",
+        "defaultValue": "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"
+      },
+      {
+        "key": "slot2Label",
+        "type": "string",
+        "label": "Soundtrack 2 name",
+        "description": "Label for the second soundtrack button.",
+        "defaultValue": "Nature"
+      },
+      {
+        "key": "slot2Uri",
+        "type": "string",
+        "label": "Soundtrack 2 Spotify URI",
+        "description": "Spotify playlist/album URI for the second soundtrack.",
+        "defaultValue": "spotify:playlist:37i9dQZF1DX4PP3DA4J0N8"
+      },
+      {
+        "key": "slot3Label",
+        "type": "string",
+        "label": "Soundtrack 3 name",
+        "description": "Label for the third (optional) soundtrack button.",
+        "defaultValue": "Custom"
+      },
+      {
+        "key": "slot3Uri",
+        "type": "string",
+        "label": "Soundtrack 3 Spotify URI",
+        "description": "Spotify playlist/album URI for the third soundtrack. Leave empty to hide this button.",
+        "defaultValue": ""
+      },
+      {
+        "key": "activeSlot",
+        "type": "number",
+        "label": "Active soundtrack",
+        "description": "Which soundtrack is selected (0, 1, or 2). Also switchable in the panel.",
+        "defaultValue": 0
+      },
+      {
+        "key": "spotifyVolume",
+        "type": "number",
+        "label": "Focus volume (%)",
+        "description": "Volume Spotify is set to during a session (0-100). Tunable via the panel slider; the pre-session volume is restored when the session ends.",
+        "defaultValue": 40
+      },
+      {
+        "key": "blockSites",
+        "type": "boolean",
+        "label": "Block distracting sites",
+        "description": "Add the enabled blocklist categories to /etc/hosts during a session. Requires the one-time blocker setup (scripts/install-blocker.sh).",
+        "defaultValue": true
+      },
+      {
+        "key": "catSocial",
+        "type": "boolean",
+        "label": "Block: Social media",
+        "description": "Facebook, Instagram, X/Twitter, TikTok, etc.",
+        "defaultValue": true
+      },
+      {
+        "key": "catVideo",
+        "type": "boolean",
+        "label": "Block: Video streaming",
+        "description": "YouTube, Netflix, Twitch, etc.",
+        "defaultValue": true
+      },
+      {
+        "key": "catShopping",
+        "type": "boolean",
+        "label": "Block: Shopping",
+        "description": "Amazon, eBay, Etsy, AliExpress, etc.",
+        "defaultValue": true
+      },
+      {
+        "key": "catNews",
+        "type": "boolean",
+        "label": "Block: News & forums",
+        "description": "Reddit, Hacker News, Quora, major news sites, etc.",
+        "defaultValue": true
+      },
+      {
+        "key": "catAdult",
+        "type": "boolean",
+        "label": "Block: Adult",
+        "description": "Adult content sites. Off by default.",
+        "defaultValue": false
+      },
+      {
+        "key": "extraDomains",
+        "type": "text",
+        "label": "Extra blocked domains",
+        "description": "Additional comma- or newline-separated domains to block during a session.",
+        "defaultValue": ""
+      },
+      {
+        "key": "openSpotify",
+        "type": "boolean",
+        "label": "Open Spotify",
+        "description": "Launch Spotify (if needed) and start the soundtrack when a session begins.",
+        "defaultValue": true
+      },
+      {
+        "key": "openObsidian",
+        "type": "boolean",
+        "label": "Open Obsidian",
+        "description": "Launch Obsidian (if it is not already open) when a session begins.",
+        "defaultValue": true
+      },
+      {
+        "key": "spotifyWorkspace",
+        "type": "number",
+        "label": "Music workspace",
+        "description": "Workspace to open the music player on (silently, out of the way). 0 disables placement. Requires the window rule from scripts/install-workspace-rule.sh.",
+        "defaultValue": 9
+      },
+      {
+        "key": "musicPlayer",
+        "type": "select",
+        "label": "Music player",
+        "description": "Which Spotify client to use. ncspot supports shuffle; the official client does not.",
+        "defaultValue": "auto",
+        "options": [
+          { "value": "auto", "label": "Auto (prefer ncspot)" },
+          { "value": "ncspot", "label": "ncspot" },
+          { "value": "spotify", "label": "Official Spotify" }
+        ]
+      },
+      {
+        "key": "alwaysShuffle",
+        "type": "boolean",
+        "label": "Always shuffle",
+        "description": "Shuffle the soundtrack when a session starts (honored by ncspot; the official Spotify client ignores it).",
+        "defaultValue": true
+      },
+      {
+        "key": "pomodoroWorkMinutes",
+        "type": "number",
+        "label": "Focus minutes",
+        "description": "Length of each Pomodoro focus phase.",
+        "defaultValue": 25
+      },
+      {
+        "key": "pomodoroShortBreakMinutes",
+        "type": "number",
+        "label": "Short break minutes",
+        "description": "Length of the short break after each focus phase.",
+        "defaultValue": 5
+      },
+      {
+        "key": "pomodoroCycles",
+        "type": "number",
+        "label": "Focus cycles",
+        "description": "Number of focus phases before the long break.",
+        "defaultValue": 4
+      },
+      {
+        "key": "pomodoroLongBreakMinutes",
+        "type": "number",
+        "label": "Long break minutes",
+        "description": "Length of the long break after the final focus cycle.",
+        "defaultValue": 15
+      },
+      {
+        "key": "pomodoroSound",
+        "type": "boolean",
+        "label": "Pomodoro sounds",
+        "description": "Play a bell between phases and three bells when the cycle completes.",
+        "defaultValue": true
+      }
+    ]
+  }
+}

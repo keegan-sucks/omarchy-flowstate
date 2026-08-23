@@ -1,0 +1,14 @@
+# Online shopping. The session script adds www. variants.
+amazon.com
+smile.amazon.com
+ebay.com
+etsy.com
+aliexpress.com
+walmart.com
+target.com
+bestbuy.com
+wish.com
+temu.com
+shein.com
+newegg.com
+wayfair.com

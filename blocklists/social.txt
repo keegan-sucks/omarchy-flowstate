@@ -1,0 +1,18 @@
+# Social media. Bare domains; the session script also adds the www. variant.
+facebook.com
+m.facebook.com
+messenger.com
+instagram.com
+threads.net
+twitter.com
+x.com
+mobile.twitter.com
+tiktok.com
+snapchat.com
+web.snapchat.com
+pinterest.com
+tumblr.com
+mastodon.social
+bsky.app
+vk.com
+weibo.com
