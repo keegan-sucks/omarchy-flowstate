@@ -7,8 +7,8 @@ import "." as Core
 
 Panel {
   id: root
-  moduleName: "io.github.gopher-boats.flowstate"
-  ipcTarget: "io.github.gopher-boats.flowstate"
+  moduleName: "io.github.keegan-sucks.flowstate"
+  ipcTarget: "io.github.keegan-sucks.flowstate"
   manageIpc: false
 
   property var anchorItem: null

@@ -7,7 +7,7 @@ import "." as Core
 
 BarWidget {
   id: root
-  moduleName: "io.github.gopher-boats.flowstate"
+  moduleName: "io.github.keegan-sucks.flowstate"
 
   readonly property bool sessionVisible: Core.FocusState.mode === Core.FocusState.pomodoroMode
     && Core.FocusState.pomodoroSessionStarted
@@ -97,7 +97,7 @@ BarWidget {
   IpcHandler {
     // Literal target: IpcHandler registers during construction, before the
     // bar host has necessarily injected the widget's properties.
-    target: "io.github.gopher-boats.flowstate"
+    target: "io.github.keegan-sucks.flowstate"
 
     function start(): string {
       if (!Core.FocusState.running) Core.FocusState.startPause()

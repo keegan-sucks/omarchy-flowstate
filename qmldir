@@ -1,2 +1,2 @@
-module io.github.gopherboats.flowstate
+module io.github.keegansucks.flowstate
 singleton FocusState 1.0 FocusState.qml

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "io.github.gopher-boats.flowstate",
+  "id": "io.github.keegan-sucks.flowstate",
   "name": "Flowstate",
   "version": "0.1.0",
-  "author": "gopher-boats",
+  "author": "keegan-sucks",
   "license": "MIT",
   "description": "A focus timer (Stopwatch + Pomodoro) that blocks distracting sites, starts a Spotify focus soundtrack at the right volume, and opens Obsidian when you begin a session.",
   "kinds": [

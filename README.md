@@ -17,8 +17,8 @@ position is chosen at install time (and movable afterwards).
 ## Install
 
 ```sh
-omarchy plugin add https://github.com/gopher-boats/omarchy-flowstate.git --enable
-omarchy bar move io.github.gopher-boats.flowstate --section right   # left | center | right
+omarchy plugin add https://github.com/keegan-sucks/omarchy-flowstate.git --enable
+omarchy bar move io.github.keegan-sucks.flowstate --section right   # left | center | right
 ```
 
 ## Music player: ncspot recommended
@@ -29,7 +29,7 @@ Flowstate drives Spotify over MPRIS and works with either client:
   client silently ignores over MPRIS. Flowstate **auto-detects and prefers ncspot**
   when it's installed. Install it and log in once:
   ```sh
-  cd ~/.config/omarchy/plugins/io.github.gopher-boats.flowstate/scripts
+  cd ~/.config/omarchy/plugins/io.github.keegan-sucks.flowstate/scripts
   ./install-ncspot.sh
   ncspot            # log in once (Spotify Premium required for playback)
   ```
@@ -57,7 +57,7 @@ slider — it's applied on start and the previous volume is restored on stop.
 Editing `/etc/hosts` needs root, so blocking is opt-in. Run once:
 
 ```sh
-cd ~/.config/omarchy/plugins/io.github.gopher-boats.flowstate/scripts
+cd ~/.config/omarchy/plugins/io.github.keegan-sucks.flowstate/scripts
 sudo ./install-blocker.sh
 ```
 
@@ -75,7 +75,7 @@ categories and add extra domains in the panel's Edit view.
 To always open the music player on a far-off workspace (default 9, silently):
 
 ```sh
-cd ~/.config/omarchy/plugins/io.github.gopher-boats.flowstate/scripts
+cd ~/.config/omarchy/plugins/io.github.keegan-sucks.flowstate/scripts
 ./install-workspace-rule.sh 9      # adds a Hyprland window rule; --uninstall to remove
 ```
 
@@ -95,7 +95,7 @@ it's left where it is.)
 
 ## Settings
 
-Editable in the widget settings, or `omarchy bar set io.github.gopher-boats.flowstate <key> <value>`:
+Editable in the widget settings, or `omarchy bar set io.github.keegan-sucks.flowstate <key> <value>`:
 
 | Key | Default | Meaning |
 |-----|---------|---------|
@@ -120,7 +120,7 @@ Editable in the widget settings, or `omarchy bar set io.github.gopher-boats.flow
 ## Scripting (IPC)
 
 ```sh
-id=io.github.gopher-boats.flowstate
+id=io.github.keegan-sucks.flowstate
 omarchy-shell "$id" status
 omarchy-shell "$id" stopwatch
 omarchy-shell "$id" pomodoro 25 5 4 15
