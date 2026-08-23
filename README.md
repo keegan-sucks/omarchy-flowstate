@@ -21,6 +21,20 @@ omarchy plugin add https://github.com/keegan-sucks/omarchy-flowstate.git --enabl
 omarchy bar move io.github.keegan-sucks.flowstate --section right   # left | center | right
 ```
 
+## Uninstall
+
+```sh
+omarchy plugin remove io.github.keegan-sucks.flowstate
+```
+
+If you ran the optional setup scripts, undo them too:
+
+```sh
+cd ~/.config/omarchy/plugins/io.github.keegan-sucks.flowstate/scripts   # (before removing, if still present)
+sudo ./install-blocker.sh --uninstall        # removes the root helper + sudoers rule
+./install-workspace-rule.sh --uninstall      # removes the Hyprland window rule
+```
+
 ## Music player: ncspot recommended
 
 Flowstate drives Spotify over MPRIS and works with either client:
