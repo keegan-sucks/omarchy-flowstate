@@ -36,21 +36,22 @@ Flowstate drives Spotify over MPRIS and works with either client:
 - **Official Spotify** — used as a fallback. Plays your playlists, but **cannot
   shuffle** and cannot play Liked Songs (Spotify client limitations).
 
-### About "Liked Songs"
+### Liked Songs (ncspot only)
 
-There is **no reliable way to play your Liked Songs by automation** on Linux (no
-playable URI; neither client exposes it over MPRIS/IPC). Instead, point a
-soundtrack slot at a **playlist** — with ncspot's always-shuffle, a playlist plays
-shuffled, which is the same experience. (Tip: in Spotify you can select your Liked
-Songs and "Add to playlist" to mirror them into a normal playlist, then use its URI.)
+The default **third slot is "Liked"** (URI keyword `liked`). On **ncspot** it plays
+your Liked/Saved songs — shuffled — by driving ncspot's Library over its IPC socket
+(needs `socat` or `nc`). There is no playable Liked-Songs URI, so the **official
+Spotify client cannot do this**; on that client the Liked button just notifies you to
+use ncspot or point the slot at a playlist. Any slot URI of `liked` (or a
+`spotify:collection[:tracks]` URI) is treated as Liked Songs.
 
 ## Soundtracks (configurable slots)
 
 The panel has up to three soundtrack buttons. Click the **⚙ Edit** button in the
 panel to rename each slot and set its **Spotify playlist/album URI** (in Spotify:
-right-click → Share → Copy Spotify URI). Defaults: **Lofi** and **Nature**; the
-third slot is empty (hidden) until you set it. Set the **volume** with the panel
-slider — it's applied on start and the previous volume is restored on stop.
+right-click → Share → Copy Spotify URI). Defaults: **Lofi**, **Nature**, and
+**Liked** (your ncspot Liked Songs — see above); clear a slot's URI to hide it. Set
+the **volume** with the panel slider — applied on start, restored on stop.
 
 ## Site blocking (one-time setup)
 
@@ -104,7 +105,7 @@ Editable in the widget settings, or `omarchy bar set io.github.keegan-sucks.flow
 | `alwaysShuffle` | `true` | Shuffle on start (honored by ncspot) |
 | `slot1Label` / `slot1Uri` | Lofi | First soundtrack name + Spotify URI |
 | `slot2Label` / `slot2Uri` | Nature | Second soundtrack |
-| `slot3Label` / `slot3Uri` | Custom / (empty) | Third soundtrack (hidden if URI empty) |
+| `slot3Label` / `slot3Uri` | Liked / `liked` | Third soundtrack; `liked` = ncspot Liked Songs |
 | `activeSlot` | `0` | Selected soundtrack index |
 | `spotifyVolume` | `40` | Focus volume (0–100); previous volume restored on stop |
 | `spotifyWorkspace` | `9` | Workspace to place the player on (needs the window rule) |
@@ -131,7 +132,7 @@ omarchy-shell "$id" open         # close | toggle
 ## Dependencies
 
 `ncspot` (recommended) or `spotify`, `obsidian`, `dbus-send` (MPRIS), `pactl`
-(per-app volume), `pgrep`, `resolvectl`, and Omarchy's `omarchy-notification-send`
+(per-app volume), `pgrep`, `resolvectl`, `socat`/`nc` (for ncspot Liked Songs), and Omarchy's `omarchy-notification-send`
 / `pw-play`. Requires the Omarchy Quattro shell + Hyprland.
 
 ## License

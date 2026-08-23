@@ -58,15 +58,15 @@
         "key": "slot3Label",
         "type": "string",
         "label": "Soundtrack 3 name",
-        "description": "Label for the third (optional) soundtrack button.",
-        "defaultValue": "Custom"
+        "description": "Label for the third soundtrack button.",
+        "defaultValue": "Liked"
       },
       {
         "key": "slot3Uri",
         "type": "string",
         "label": "Soundtrack 3 Spotify URI",
-        "description": "Spotify playlist/album URI for the third soundtrack. Leave empty to hide this button.",
-        "defaultValue": ""
+        "description": "Spotify playlist/album URI, or the keyword 'liked' to play your ncspot Liked Songs. Leave empty to hide this button.",
+        "defaultValue": "liked"
       },
       {
         "key": "activeSlot",

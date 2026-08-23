@@ -155,6 +155,55 @@ set_player_volume() {
   done < <(pactl list sink-inputs 2>/dev/null)
 }
 
+# --- ncspot IPC (for Liked Songs, which has no playable Spotify URI) --------
+
+NCSPOT_SOCK=""
+resolve_ncspot_sock() {
+  local d="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ncspot"
+  if [ -S "$d/ncspot.sock" ]; then NCSPOT_SOCK="$d/ncspot.sock"
+  else NCSPOT_SOCK="$(ls "$d"/*.sock 2>/dev/null | head -1)"; fi
+}
+
+# Send one raw ncspot command string to its IPC socket (socat or nc).
+ncspot_ipc() {
+  [ -S "$NCSPOT_SOCK" ] || return 1
+  if command -v socat >/dev/null 2>&1; then
+    printf '%s\n' "$1" | timeout 2 socat - UNIX-CONNECT:"$NCSPOT_SOCK" >/dev/null 2>&1
+  elif command -v nc >/dev/null 2>&1; then
+    printf '%s\n' "$1" | timeout 2 nc -U "$NCSPOT_SOCK" >/dev/null 2>&1
+  else
+    return 1
+  fi
+}
+
+# A soundtrack "URI" that means "the user's Liked/Saved songs".
+is_liked_uri() {
+  case "${1,,}" in
+    liked|ncspot:liked|*:collection:tracks|*:collection) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Play the Liked/Saved tracks on ncspot by driving its Library UI over IPC:
+# focus library, move to the left-most (Saved Tracks) tab, top of the list,
+# select the first track and play. Retried because a freshly launched ncspot
+# populates Liked Songs asynchronously.
+play_ncspot_liked() {
+  resolve_ncspot_sock
+  [ -S "$NCSPOT_SOCK" ] || { notify "ncspot IPC socket not found for Liked Songs"; return 1; }
+  local attempt
+  for attempt in $(seq 1 6); do
+    ncspot_ipc 'focus library'; sleep 1
+    ncspot_ipc 'move left 6'; sleep 0.3
+    ncspot_ipc 'move up 400'; sleep 0.3
+    ncspot_ipc 'move down 1'; sleep 0.3
+    ncspot_ipc 'play'; sleep 2
+    [ "$(player_status)" = "Playing" ] && return 0
+    sleep 2   # Liked Songs may still be loading on a fresh launch
+  done
+  return 1
+}
+
 # --- Blocklist -------------------------------------------------------------
 
 build_domains() {
@@ -221,16 +270,25 @@ engage() {
         sleep 3
       fi
 
-      if [ -n "$PLAYLIST" ]; then
-        mpris OpenUri string:"$PLAYLIST"
-        sleep 2
+      if is_liked_uri "$PLAYLIST"; then
+        # Liked Songs: only ncspot can play them (no playable Spotify URI).
+        if [ "$PLAYER" = "ncspot" ]; then
+          play_ncspot_liked || notify "Couldn't start Liked Songs (still loading?)"
+        else
+          notify "Liked Songs requires ncspot — install it or pick a playlist"
+        fi
+      else
+        if [ -n "$PLAYLIST" ]; then
+          mpris OpenUri string:"$PLAYLIST"
+          sleep 2
+        fi
+        # A restored session can come up paused; retry Play until it plays.
+        for i in $(seq 1 8); do
+          [ "$(player_status)" = "Playing" ] && break
+          mpris Play
+          sleep 1
+        done
       fi
-
-      for i in $(seq 1 8); do
-        [ "$(player_status)" = "Playing" ] && break
-        mpris Play
-        sleep 1
-      done
 
       # Always-shuffle (honored by ncspot; ignored by the official client).
       [ "$SHUFFLE" = "1" ] && set_shuffle true

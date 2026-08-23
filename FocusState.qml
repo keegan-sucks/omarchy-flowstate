@@ -43,8 +43,8 @@ Item {
   property string slot1Uri: "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"
   property string slot2Label: "Nature"
   property string slot2Uri: "spotify:playlist:37i9dQZF1DX4PP3DA4J0N8"
-  property string slot3Label: "Custom"
-  property string slot3Uri: ""
+  property string slot3Label: "Liked"
+  property string slot3Uri: "liked"             // sentinel: ncspot Liked Songs (see script)
   property int activeSlot: 0                    // 0-based index of the chosen slot
 
   property int spotifyVolume: 40
