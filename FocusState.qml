@@ -3,178 +3,128 @@ pragma Singleton
 import QtQuick
 import Quickshell
 
-// Shared, long-lived Pomodoro timer + focus-session state. (The mode field is
-// retained internally but locked to Pomodoro — there is no Stopwatch anymore.)
-// Plus the "focus session" orchestration: when a session starts we shell out to
-// scripts/flowstate-session.sh to block sites, start Spotify (spotify_player)
-// and isolate Obsidian on its own workspace; when it ends we unblock, restore
-// the previous Spotify volume and pause, and un-park the windows we moved off
-// the focus workspace.
+// Shared, long-lived Pomodoro timer + focus-session state — a port of the macOS
+// Flowstate's TimerEngine, kept in lockstep with it:
+//
+//   focus 1 → short → focus 2 → short → … → focus `cycles`, then the session
+//   ENDS with a long-break cue (there is NO timed long break).
+//
+// A running session drives a Spotify soundtrack via scripts/flowstate-session.sh
+// (spotify_player): started once at the beginning, PAUSED during short breaks and
+// RESUMED when focus returns, and stopped (volume restored + paused) at the end.
+// Distinct phase-boundary sounds play at each transition.
 Item {
   id: root
 
-  readonly property int stopwatchMode: 0
-  readonly property int pomodoroMode: 1
+  // --- Timer configuration -------------------------------------------------
+  property int workMinutes: 25
+  property int shortBreakMinutes: 5
+  property int cycles: 4
 
-  property int mode: pomodoroMode
+  // --- Live state ----------------------------------------------------------
+  property string phase: "idle"                // idle | focus | short-break
+  property int round: 1
+  property int completedFocusBlocks: 0
   property bool running: false
-  property bool completed: false
   property double startedAt: 0
   property double storedElapsedMs: 0
   property double nowMs: Date.now()
   property int completionBellsRemaining: 0
 
-  // --- Pomodoro configuration / progress -----------------------------------
-  property int pomodoroWorkMinutes: 25
-  property int pomodoroShortBreakMinutes: 5
-  property int pomodoroCycles: 4
-  property int pomodoroLongBreakMinutes: 15
-  property bool pomodoroSoundEnabled: true
-  property color pomodoroBreakColor: "#a6e3a1"
-  property string pomodoroPhaseKind: "focus"   // focus | short-break | long-break
-  property int pomodoroCurrentCycle: 1
-  property int pomodoroCompletedCycles: 0
-  property bool pomodoroSessionStarted: false
+  property color breakColor: "#a6e3a1"
 
-  // --- Focus-session configuration (pushed in from BarWidget settings) -----
-  property bool focusEffects: true
+  // --- Soundtrack (spotify_player) ----------------------------------------
+  property bool playSoundtrack: true
+  property int spotifyVolume: 35
+  property bool alwaysShuffle: true
+  property int spotifyWorkspace: 9             // 0 leaves the player where it is
+  property bool nowPlaying: false              // notify on each song change
 
-  // Soundtrack slots — each an editable {label, uri}, chosen/edited in the
-  // panel. A URI of "liked" plays your Liked Songs (shuffled).
+  // Three editable soundtrack slots. A target of "liked" plays Liked Songs.
   property string slot1Label: "Lofi"
   property string slot1Uri: "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"
   property string slot2Label: "Nature"
   property string slot2Uri: "spotify:playlist:37i9dQZF1DX4PP3DA4J0N8"
   property string slot3Label: "Liked"
-  property string slot3Uri: "liked"            // sentinel: your Liked Songs
-  property int activeSlot: 2                    // 0-based index of the chosen slot
+  property string slot3Uri: "liked"
+  property int activeSlot: 2                    // 0-based; Liked by default
 
-  property int spotifyVolume: 35
-  property bool alwaysShuffle: true
+  // --- Phase-boundary sounds (freedesktop .oga names, minus extension) -----
+  property bool soundsEnabled: true
+  property string shortBreakSound: "bell"
+  property string backToWorkSound: "complete"
+  property string longBreakSound: "alarm-clock-elapsed"
+  property real shortBreakVolume: 1.0
+  property real backToWorkVolume: 1.0
+  property real longBreakVolume: 1.0
 
-  // Blocklist categories (domains come from the bundled blocklists/*.txt).
-  property bool blockSites: true
-  property bool catSocial: true
-  property bool catVideo: true
-  property bool catShopping: true
-  property bool catNews: true
-  property bool catAdult: false
-  property string extraDomains: ""
+  // --- Menu/bar glyphs -----------------------------------------------------
+  property string focusGlyph: "⌖"
+  property string breakGlyph: "☾"
 
-  property bool openSpotify: true              // open spotify_player on start
-  property bool openObsidian: true
-  property bool isolateObsidian: true          // park other windows off the focus ws
-  property int focusWorkspace: 0               // 0 = current active workspace
-  property int spotifyWorkspace: 9             // 0 disables the placement
-
-  // True while a focus session's side-effects are engaged. Stays true across
-  // pauses and breaks — released only on reset() or full completion.
+  // True while the soundtrack side-effect is engaged (start → stop). Stays true
+  // across pauses and breaks; the break/resume actions pause/play within it.
   property bool focusActive: false
 
-  // Absolute path to the orchestration script, resolved relative to this file
-  // so the plugin keeps working if the directory is renamed or relocated.
   readonly property string sessionScript: {
     var u = Qt.resolvedUrl("scripts/flowstate-session.sh").toString()
     return u.replace(/^file:\/\//, "")
   }
 
-  readonly property double pomodoroWorkMs: Math.max(1, pomodoroWorkMinutes) * 60000
-  readonly property double pomodoroShortBreakMs: Math.max(1, pomodoroShortBreakMinutes) * 60000
-  readonly property double pomodoroLongBreakMs: Math.max(1, pomodoroLongBreakMinutes) * 60000
-  readonly property double pomodoroPhaseDurationMs: pomodoroPhaseKind === "long-break"
-    ? pomodoroLongBreakMs
-    : pomodoroPhaseKind === "short-break"
-      ? pomodoroShortBreakMs
-      : pomodoroWorkMs
-  readonly property double targetMs: mode === pomodoroMode ? pomodoroPhaseDurationMs : 0
-  readonly property double elapsedMs: Math.max(0, Math.round(running ? storedElapsedMs + nowMs - startedAt : storedElapsedMs))
+  // --- Derived state -------------------------------------------------------
+  readonly property bool isSessionActive: phase !== "idle"
+  readonly property bool onBreak: phase === "short-break"
 
-  readonly property var pomodoroPhase: ({
-    kind: pomodoroPhaseKind,
-    cycle: pomodoroCurrentCycle,
-    label: pomodoroPhaseKind === "focus"
-      ? "Focus " + pomodoroCurrentCycle + " of " + pomodoroCycles
-      : pomodoroPhaseKind === "long-break"
-        ? "Long break"
-        : "Short break · Cycle " + pomodoroCurrentCycle + " of " + pomodoroCycles,
-    durationMs: pomodoroPhaseDurationMs,
-    elapsedMs: Math.min(elapsedMs, pomodoroPhaseDurationMs),
-    remainingMs: Math.max(0, pomodoroPhaseDurationMs - elapsedMs)
-  })
+  readonly property double phaseDurationMs:
+    (phase === "short-break" ? Math.max(1, shortBreakMinutes) : Math.max(1, workMinutes)) * 60000
+  readonly property double elapsedMs:
+    Math.max(0, Math.round(running ? storedElapsedMs + nowMs - startedAt : storedElapsedMs))
+  readonly property double remainingMs: Math.max(0, phaseDurationMs - elapsedMs)
+  readonly property real progress: phaseDurationMs > 0 ? Math.min(1, elapsedMs / phaseDurationMs) : 0
 
-  readonly property double displayMs: mode === stopwatchMode
-    ? elapsedMs
-    : pomodoroPhase.remainingMs
-  readonly property real progress: mode === stopwatchMode
-    ? 0
-    : pomodoroPhase.durationMs > 0
-      ? Math.min(1, pomodoroPhase.elapsedMs / pomodoroPhase.durationMs)
-      : 0
+  // Idle shows the (possibly just-edited) focus length; otherwise the countdown.
+  readonly property double displayMs: phase === "idle" ? Math.max(1, workMinutes) * 60000 : remainingMs
 
-  readonly property string modeName: mode === stopwatchMode ? "Stopwatch" : "Pomodoro"
-  readonly property bool onBreak: mode === pomodoroMode
-    && pomodoroSessionStarted
-    && pomodoroPhaseKind !== "focus"
+  readonly property string phaseLabel: phase === "idle"
+    ? "Ready"
+    : phase === "focus"
+      ? "Focus " + round + " of " + cycles
+      : "Short break"
 
   readonly property string statusText: {
-    if (completed) return mode === pomodoroMode ? "Pomodoro complete" : "Time is up"
-    if (mode === pomodoroMode) {
-      if (running) return pomodoroPhase.label
-      if (pomodoroSessionStarted) return "Paused · " + pomodoroPhase.label
-      return pomodoroCycles + " cycles · " + pomodoroWorkMinutes + " / " + pomodoroShortBreakMinutes + " min"
-    }
-    if (running) return "Counting up"
-    if (storedElapsedMs > 0) return "Paused"
-    return "Ready"
+    if (phase === "idle") return cycles + " cycles · " + workMinutes + " / " + shortBreakMinutes + " min"
+    if (!running) return "Paused · " + phaseLabel
+    return phaseLabel
   }
 
-  readonly property string displayText: formatTime(displayMs, mode === stopwatchMode)
-  readonly property string barTimeText: running || storedElapsedMs > 0 || completed
-    || (mode === pomodoroMode && pomodoroSessionStarted)
-    ? formatTime(displayMs, false)
-    : ""
-
-  function formatTime(milliseconds, showCentiseconds) {
-    var safeMilliseconds = Math.max(0, Math.floor(milliseconds))
-    var totalSeconds = showCentiseconds || mode === stopwatchMode
-      ? Math.floor(safeMilliseconds / 1000)
-      : Math.ceil(milliseconds / 1000)
-    var hours = Math.floor(totalSeconds / 3600)
-    var minutes = Math.floor((totalSeconds % 3600) / 60)
-    var seconds = totalSeconds % 60
-    var mm = minutes < 10 ? "0" + minutes : String(minutes)
-    var ss = seconds < 10 ? "0" + seconds : String(seconds)
-    var result = hours > 0 ? hours + ":" + mm + ":" + ss : mm + ":" + ss
-    if (!showCentiseconds) return result
-    var centiseconds = Math.floor((safeMilliseconds % 1000) / 10)
-    return result + "." + (centiseconds < 10 ? "0" : "") + centiseconds
+  // Filled/empty round dots, e.g. "●●○○".
+  readonly property int filledDots: phase === "idle" ? 0 : (phase === "focus" ? round : completedFocusBlocks)
+  readonly property string dotsText: {
+    var total = Math.max(1, cycles)
+    var filled = Math.min(Math.max(0, filledDots), total)
+    var s = ""
+    for (var i = 0; i < filled; i++) s += "●"
+    for (var j = filled; j < total; j++) s += "○"
+    return s
   }
 
-  function pad2(value) {
-    return value < 10 ? "0" + value : String(value)
+  readonly property string glyph: onBreak ? breakGlyph : focusGlyph
+  readonly property string displayText: formatTime(displayMs)
+  readonly property string barTimeText: isSessionActive ? formatTime(displayMs) : ""
+
+  function formatTime(milliseconds) {
+    var total = Math.ceil(Math.max(0, milliseconds) / 1000)
+    var m = Math.floor(total / 60)
+    var s = total % 60
+    return m + ":" + (s < 10 ? "0" + s : String(s))
   }
 
-  // --- Mode / transport ----------------------------------------------------
-
-  function selectMode(nextMode) {
-    nextMode = nextMode === stopwatchMode ? stopwatchMode : pomodoroMode
-    if (nextMode === mode) return
-    mode = nextMode
-    reset()
-  }
+  // --- Transport (Space / R / S) ------------------------------------------
 
   function startPause() {
-    if (running) {
-      pause()
-      return
-    }
-    if (completed) reset()
-    if (mode === pomodoroMode && targetMs <= 0) return
-    if (mode === pomodoroMode) pomodoroSessionStarted = true
-    nowMs = Date.now()
-    startedAt = nowMs
-    running = true
-    engageFocus()
+    if (running) { pause(); return }
+    if (phase === "idle") beginSession()
+    else resumeTimer()
   }
 
   function pause() {
@@ -182,143 +132,119 @@ Item {
     nowMs = Date.now()
     storedElapsedMs = elapsedMs
     running = false
-    // Deliberately does NOT release focus — a paused session stays "in focus".
+    // Music intentionally stays engaged while paused (matches macOS).
   }
 
   function reset() {
+    var wasActive = isSessionActive
     running = false
-    completed = false
+    phase = "idle"
+    round = 1
+    completedFocusBlocks = 0
     storedElapsedMs = 0
     nowMs = Date.now()
     startedAt = nowMs
-    if (mode === pomodoroMode) {
-      pomodoroPhaseKind = "focus"
-      pomodoroCurrentCycle = 1
-      pomodoroCompletedCycles = 0
-      pomodoroSessionStarted = false
+    if (wasActive) musicStop()      // stop the soundtrack once (no cue on manual reset)
+  }
+
+  function skip() {
+    if (phase === "idle") return
+    if (phase === "focus") {
+      if (round >= cycles) {
+        finishSession()
+        playCue("long-break")
+      } else {
+        enterPhase("short-break")
+        playCue("short-break")
+        musicBreak()
+      }
+    } else {                          // short-break
+      round = completedFocusBlocks + 1
+      enterPhase("focus")
+      playCue("back-to-work")
+      musicResume()
     }
-    disengageFocus()
   }
 
-  // --- Pomodoro configuration setters (called from BarWidget/Panel) --------
+  // Skip the current SONG (not the phase).
+  function nextTrack() { musicNext() }
 
-  function setPomodoroWorkMinutes(value) {
-    pomodoroWorkMinutes = Math.max(1, Math.min(999, Number(value)))
-    reset()
+  // --- Transitions ---------------------------------------------------------
+
+  function completeCurrentPhase() {
+    if (phase === "focus") {
+      completedFocusBlocks = Math.min(cycles, completedFocusBlocks + 1)
+      if (completedFocusBlocks >= cycles) {
+        finishSession()
+        playCue("long-break")         // no timed long break — just the cue
+      } else {
+        enterPhase("short-break")
+        playCue("short-break")
+        musicBreak()
+      }
+    } else if (phase === "short-break") {
+      round = completedFocusBlocks + 1
+      enterPhase("focus")
+      playCue("back-to-work")
+      musicResume()
+    }
   }
 
-  function setPomodoroShortBreakMinutes(value) {
-    pomodoroShortBreakMinutes = Math.max(1, Math.min(999, Number(value)))
-    reset()
-  }
-
-  function setPomodoroCycles(value) {
-    pomodoroCycles = Math.max(1, Math.min(99, Number(value)))
-    reset()
-  }
-
-  function setPomodoroLongBreakMinutes(value) {
-    pomodoroLongBreakMinutes = Math.max(1, Math.min(999, Number(value)))
-    reset()
-  }
-
-  function setPomodoroSoundEnabled(enabled) {
-    pomodoroSoundEnabled = Boolean(enabled)
-  }
-
-  function slotLabel(i) { return i === 0 ? slot1Label : i === 1 ? slot2Label : slot3Label }
-  function slotUri(i) { return i === 0 ? slot1Uri : i === 1 ? slot2Uri : slot3Uri }
-  function slotConfigured(i) { return String(slotUri(i)).length > 0 }
-
-  function setActiveSlot(i) { activeSlot = Math.max(0, Math.min(2, Math.round(Number(i)))) }
-
-  function setSpotifyVolume(value) {
-    spotifyVolume = Math.max(0, Math.min(100, Math.round(Number(value))))
-  }
-
-  // Bulk-apply pomodoro numbers without a reset per field (used on settings load).
-  function configurePomodoro(workMinutes, shortBreakMinutes, cycles, longBreakMinutes, soundEnabled) {
-    var nextWork = Math.max(1, Math.min(999, Number(workMinutes)))
-    var nextShort = Math.max(1, Math.min(999, Number(shortBreakMinutes)))
-    var nextCycles = Math.max(1, Math.min(99, Number(cycles)))
-    var nextLong = Math.max(1, Math.min(999, Number(longBreakMinutes)))
-    var changed = nextWork !== pomodoroWorkMinutes
-      || nextShort !== pomodoroShortBreakMinutes
-      || nextCycles !== pomodoroCycles
-      || nextLong !== pomodoroLongBreakMinutes
-    pomodoroWorkMinutes = nextWork
-    pomodoroShortBreakMinutes = nextShort
-    pomodoroCycles = nextCycles
-    pomodoroLongBreakMinutes = nextLong
-    pomodoroSoundEnabled = Boolean(soundEnabled)
-    if (changed && mode === pomodoroMode && !pomodoroSessionStarted) reset()
-  }
-
-  // --- Pomodoro phase machine ---------------------------------------------
-
-  function beginPomodoroPhase(kind, cycle, autoRun) {
-    pomodoroPhaseKind = kind
-    pomodoroCurrentCycle = Math.max(1, Math.min(pomodoroCycles, Number(cycle)))
+  function beginSession() {
+    phase = "focus"
+    round = 1
+    completedFocusBlocks = 0
     storedElapsedMs = 0
     nowMs = Date.now()
     startedAt = nowMs
-    running = Boolean(autoRun)
-    completed = false
-    pomodoroSessionStarted = true
+    running = true
+    musicStart()                      // start the soundtrack once
   }
 
-  function skipPomodoroPhase() {
-    if (mode !== pomodoroMode || !pomodoroSessionStarted || completed) return
-    if (pomodoroPhaseKind === "focus") {
-      beginPomodoroPhase("short-break", pomodoroCurrentCycle, true)
-      notify("Focus skipped · Short break starts now")
-      return
-    }
-    if (pomodoroPhaseKind === "short-break") {
-      beginPomodoroPhase("focus", pomodoroCompletedCycles + 1, false)
-      notify("Break skipped · Ready for focus " + pomodoroCurrentCycle)
-      return
-    }
-    finishPomodoroCycle(false)
+  function resumeTimer() {
+    if (running || phase === "idle") return
+    nowMs = Date.now()
+    startedAt = nowMs - storedElapsedMs
+    running = true
   }
 
-  function completePomodoroPhase() {
-    if (pomodoroPhaseKind === "focus") {
-      pomodoroCompletedCycles = Math.min(pomodoroCycles, pomodoroCompletedCycles + 1)
-      var longBreak = pomodoroCompletedCycles >= pomodoroCycles
-      beginPomodoroPhase(longBreak ? "long-break" : "short-break", pomodoroCompletedCycles, true)
-      playPomodoroSound()
-      notify(longBreak
-        ? "Focus " + pomodoroCompletedCycles + " complete · Long break starts now"
-        : "Focus " + pomodoroCompletedCycles + " complete · Short break starts now")
-      return
-    }
-    if (pomodoroPhaseKind === "long-break") {
-      finishPomodoroCycle(true)
-      return
-    }
-    beginPomodoroPhase("focus", pomodoroCompletedCycles + 1, false)
-    playPomodoroSound()
-    notify("Break complete · Ready for focus " + pomodoroCurrentCycle)
+  function enterPhase(next) {
+    phase = next
+    storedElapsedMs = 0
+    nowMs = Date.now()
+    startedAt = nowMs
+    // running unchanged — the ticker keeps counting (continuous advance).
   }
 
-  function finishPomodoroCycle(withSound) {
-    storedElapsedMs = pomodoroPhaseDurationMs
+  function finishSession() {
     running = false
-    completed = true
-    pomodoroSessionStarted = true
-    if (withSound) playCompletionSequence()
-    notify("All " + pomodoroCycles + " focus cycles complete")
-    disengageFocus()
+    phase = "idle"
+    round = 1
+    completedFocusBlocks = 0
+    storedElapsedMs = 0
+    nowMs = Date.now()
+    startedAt = nowMs
+    musicStop()
   }
 
   function tick() {
     nowMs = Date.now()
-    if (!running || mode === stopwatchMode) return
-    if (elapsedMs >= targetMs) completePomodoroPhase()
+    if (!running) return
+    if (elapsedMs >= phaseDurationMs) completeCurrentPhase()
   }
 
-  // --- Focus-session side effects -----------------------------------------
+  // --- Config setters (called from BarWidget / Panel) ----------------------
+
+  function setWorkMinutes(v)       { workMinutes = clampInt(v, 1, 999);  if (!isSessionActive) reset() }
+  function setShortBreakMinutes(v) { shortBreakMinutes = clampInt(v, 1, 999); if (!isSessionActive) reset() }
+  function setCycles(v)            { cycles = clampInt(v, 1, 99);        if (!isSessionActive) reset() }
+  function setActiveSlot(i)        { activeSlot = clampInt(i, 0, 2) }
+  function setSpotifyVolume(v)     { spotifyVolume = clampInt(v, 0, 100) }
+  function clampInt(v, lo, hi)     { return Math.max(lo, Math.min(hi, Math.round(Number(v)))) }
+
+  function slotLabel(i) { return i === 0 ? slot1Label : i === 1 ? slot2Label : slot3Label }
+  function slotUri(i)   { return i === 0 ? slot1Uri : i === 1 ? slot2Uri : slot3Uri }
+  function slotConfigured(i) { return String(slotUri(i)).length > 0 }
 
   function focusPlaylist() {
     var u = slotUri(activeSlot)
@@ -327,92 +253,56 @@ Item {
     return ""
   }
 
-  // Comma-separated list of enabled blocklist categories for the script.
-  function focusCategoriesCsv() {
-    var c = []
-    if (catSocial) c.push("social")
-    if (catVideo) c.push("video")
-    if (catShopping) c.push("shopping")
-    if (catNews) c.push("news")
-    if (catAdult) c.push("adult")
-    return c.join(",")
-  }
-
-  // NOTE: argument order MUST match scripts/flowstate-session.sh.
+  // --- Soundtrack orchestration (scripts/flowstate-session.sh) --------------
+  // Arg order MUST match the script: <action> <playlist> <volume> <workspace>
+  //                                  <shuffle 0|1> <nowPlaying 0|1>
   function runSession(action) {
     Quickshell.execDetached([
       "bash", sessionScript, action,
-      focusPlaylist(), String(spotifyVolume),
-      blockSites ? "1" : "0",
-      openSpotify ? "1" : "0",
-      openObsidian ? "1" : "0",
-      focusCategoriesCsv(), String(extraDomains),
-      String(spotifyWorkspace), String(focusWorkspace),
-      isolateObsidian ? "1" : "0",
-      alwaysShuffle ? "1" : "0"
+      focusPlaylist(), String(spotifyVolume), String(spotifyWorkspace),
+      alwaysShuffle ? "1" : "0", nowPlaying ? "1" : "0"
     ])
   }
 
-  function engageFocus() {
-    if (!focusEffects || focusActive) return
+  function musicStart() {
+    if (!playSoundtrack || focusActive) return
     focusActive = true
     runSession("on")
   }
-
-  function disengageFocus() {
+  function musicStop() {
     if (!focusActive) return
     focusActive = false
     runSession("off")
   }
+  function musicBreak()  { if (playSoundtrack && focusActive) runSession("break") }
+  function musicResume() { if (playSoundtrack && focusActive) runSession("resume") }
+  function musicNext()   { if (playSoundtrack && focusActive) runSession("next") }
 
-  // --- Sounds / notifications ---------------------------------------------
+  // --- Phase-boundary sounds ----------------------------------------------
 
-  function playSound(soundFile) {
+  function playCue(cue) {
+    if (!soundsEnabled) return
+    if (cue === "short-break") playSoundFile(shortBreakSound, shortBreakVolume)
+    else if (cue === "back-to-work") playSoundFile(backToWorkSound, backToWorkVolume)
+    else playSoundFile(longBreakSound, longBreakVolume)
+  }
+
+  function playSoundFile(name, volume) {
+    if (!name || name.length === 0) return
     Quickshell.execDetached([
-      "pw-play",
-      "--volume", "1.0",
-      "/usr/share/sounds/freedesktop/stereo/" + soundFile
+      "pw-play", "--volume", String(Math.max(0, Math.min(1, volume))),
+      "/usr/share/sounds/freedesktop/stereo/" + name + ".oga"
     ])
-  }
-
-  function playCompletionSequence() {
-    if (mode === pomodoroMode && !pomodoroSoundEnabled) return
-    completionBellTimer.stop()
-    completionBellsRemaining = 3
-    playNextCompletionBell()
-  }
-
-  function playPomodoroSound() {
-    if (pomodoroSoundEnabled) playSound("complete.oga")
-  }
-
-  function playNextCompletionBell() {
-    if (completionBellsRemaining <= 0) return
-    playSound("complete.oga")
-    completionBellsRemaining -= 1
-    if (completionBellsRemaining > 0) completionBellTimer.restart()
   }
 
   function notify(message) {
-    Quickshell.execDetached([
-      "omarchy-notification-send",
-      "-g", "◷",
-      "Flowstate",
-      message
-    ])
+    Quickshell.execDetached(["omarchy-notification-send", "-g", "◷", "Flowstate", message])
   }
 
   Timer {
-    interval: root.mode === root.stopwatchMode ? 10 : 100
+    interval: 250
     repeat: true
     running: root.running
     onTriggered: root.tick()
-  }
-
-  Timer {
-    id: completionBellTimer
-    interval: 625
-    repeat: false
-    onTriggered: root.playNextCompletionBell()
   }
 }

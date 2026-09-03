@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.keegan-sucks.flowstate",
   "name": "Flowstate",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "author": "keegan-sucks",
   "license": "MIT",
-  "description": "A Pomodoro focus timer that blocks distracting sites, plays a shuffled Spotify soundtrack (incl. your Liked Songs) via spotify_player, and isolates Obsidian on its own workspace when you begin a session.",
+  "description": "A Pomodoro focus timer for the Omarchy bar with a spotify_player soundtrack (Liked-Songs shuffle included) that pauses on breaks, and distinct phase-boundary sounds.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,199 +14,225 @@
   },
   "barWidget": {
     "displayName": "Flowstate",
-    "description": "Pomodoro focus timer with site blocking, Spotify, and Obsidian",
+    "description": "Pomodoro focus timer with a Spotify soundtrack and phase sounds",
     "category": "Time",
     "allowMultiple": false,
-    "defaultSection": "center",
+    "defaultSection": "right",
     "schema": [
       {
-        "key": "focusEffects",
-        "type": "boolean",
-        "label": "Focus effects",
-        "description": "Master switch: run the blocking / Spotify / Obsidian actions when a session starts. Turn off to use the timer on its own.",
-        "defaultValue": true
-      },
-      {
-        "key": "slot1Label",
-        "type": "string",
-        "label": "Soundtrack 1 name",
-        "description": "Label for the first soundtrack button.",
-        "defaultValue": "Lofi"
-      },
-      {
-        "key": "slot1Uri",
-        "type": "string",
-        "label": "Soundtrack 1 Spotify URI/URL",
-        "description": "Spotify playlist/album/artist link for the first soundtrack. Paste a share link or a spotify:playlist:… URI, or the keyword 'liked' for your Liked Songs.",
-        "defaultValue": "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"
-      },
-      {
-        "key": "slot2Label",
-        "type": "string",
-        "label": "Soundtrack 2 name",
-        "description": "Label for the second soundtrack button.",
-        "defaultValue": "Nature"
-      },
-      {
-        "key": "slot2Uri",
-        "type": "string",
-        "label": "Soundtrack 2 Spotify URI/URL",
-        "description": "Spotify playlist/album/artist link for the second soundtrack.",
-        "defaultValue": "spotify:playlist:37i9dQZF1DX4PP3DA4J0N8"
-      },
-      {
-        "key": "slot3Label",
-        "type": "string",
-        "label": "Soundtrack 3 name",
-        "description": "Label for the third soundtrack button.",
-        "defaultValue": "Liked"
-      },
-      {
-        "key": "slot3Uri",
-        "type": "string",
-        "label": "Soundtrack 3 Spotify URI/URL",
-        "description": "Spotify link, or the keyword 'liked' to play your Liked Songs (shuffled). Leave empty to hide this button.",
-        "defaultValue": "liked"
-      },
-      {
-        "key": "activeSlot",
+        "key": "workMinutes",
         "type": "number",
-        "label": "Active soundtrack",
-        "description": "Which soundtrack is selected (0, 1, or 2). Also switchable in the panel.",
-        "defaultValue": 2
+        "label": "Focus minutes",
+        "description": "Length of each focus block.",
+        "defaultValue": 25
+      },
+      {
+        "key": "shortBreakMinutes",
+        "type": "number",
+        "label": "Short break minutes",
+        "description": "Length of the short break between focus blocks. (There is no timed long break — the session ends after the last focus block.)",
+        "defaultValue": 5
+      },
+      {
+        "key": "cycles",
+        "type": "number",
+        "label": "Focus cycles",
+        "description": "Number of focus blocks in a session.",
+        "defaultValue": 4
+      },
+      {
+        "key": "playSoundtrack",
+        "type": "boolean",
+        "label": "Play soundtrack",
+        "description": "Start a spotify_player soundtrack when a session begins; pause it during breaks; restore + pause it at the end.",
+        "defaultValue": true
       },
       {
         "key": "spotifyVolume",
         "type": "number",
         "label": "Focus volume (%)",
-        "description": "Volume Spotify is set to during a session (0-100). Tunable via the panel slider; the pre-session volume is restored when the session ends.",
+        "description": "Volume the soundtrack is ducked to during focus (0-100). The pre-session volume is restored on stop.",
         "defaultValue": 35
       },
       {
         "key": "alwaysShuffle",
         "type": "boolean",
         "label": "Always shuffle",
-        "description": "Shuffle the soundtrack when a session starts.",
+        "description": "Shuffle the soundtrack and start on a random track.",
         "defaultValue": true
-      },
-      {
-        "key": "blockSites",
-        "type": "boolean",
-        "label": "Block distracting sites",
-        "description": "Add the enabled blocklist categories to /etc/hosts during a session. Requires the one-time blocker setup (scripts/install-blocker.sh).",
-        "defaultValue": true
-      },
-      {
-        "key": "catSocial",
-        "type": "boolean",
-        "label": "Block: Social media",
-        "description": "Facebook, Instagram, X/Twitter, TikTok, Reddit, etc.",
-        "defaultValue": true
-      },
-      {
-        "key": "catVideo",
-        "type": "boolean",
-        "label": "Block: Video streaming",
-        "description": "YouTube, Netflix, Twitch, etc.",
-        "defaultValue": true
-      },
-      {
-        "key": "catShopping",
-        "type": "boolean",
-        "label": "Block: Shopping",
-        "description": "Amazon, eBay, Etsy, AliExpress, etc.",
-        "defaultValue": true
-      },
-      {
-        "key": "catNews",
-        "type": "boolean",
-        "label": "Block: News & forums",
-        "description": "News aggregators, Hacker News, Quora, major news sites, etc.",
-        "defaultValue": true
-      },
-      {
-        "key": "catAdult",
-        "type": "boolean",
-        "label": "Block: Adult",
-        "description": "Adult content sites.",
-        "defaultValue": true
-      },
-      {
-        "key": "extraDomains",
-        "type": "text",
-        "label": "Extra blocked domains",
-        "description": "Additional comma- or newline-separated domains to block during a session.",
-        "defaultValue": ""
-      },
-      {
-        "key": "openSpotify",
-        "type": "boolean",
-        "label": "Open Spotify",
-        "description": "Launch spotify_player (if needed) and start the soundtrack when a session begins.",
-        "defaultValue": true
-      },
-      {
-        "key": "openObsidian",
-        "type": "boolean",
-        "label": "Open Obsidian",
-        "description": "Launch/focus Obsidian on the focus workspace when a session begins.",
-        "defaultValue": true
-      },
-      {
-        "key": "isolateObsidian",
-        "type": "boolean",
-        "label": "Obsidian alone on workspace",
-        "description": "Move every other window off the focus workspace (into a hidden 'parked' special workspace) so Obsidian is the only window there. Restored when the session ends.",
-        "defaultValue": true
-      },
-      {
-        "key": "focusWorkspace",
-        "type": "number",
-        "label": "Focus (Obsidian) workspace",
-        "description": "Workspace to put Obsidian on and focus. 0 = whichever workspace is active when the session starts.",
-        "defaultValue": 0
       },
       {
         "key": "spotifyWorkspace",
         "type": "number",
-        "label": "Music workspace",
-        "description": "Workspace to open spotify_player on (silently, out of the way). 0 disables placement. Flowstate places the window with hyprctl — no Hyprland window rule required.",
+        "label": "Player workspace",
+        "description": "Workspace to move the spotify_player terminal to (silently). 0 leaves it in place.",
         "defaultValue": 9
       },
       {
-        "key": "pomodoroWorkMinutes",
-        "type": "number",
-        "label": "Focus minutes",
-        "description": "Length of each Pomodoro focus phase.",
-        "defaultValue": 25
-      },
-      {
-        "key": "pomodoroShortBreakMinutes",
-        "type": "number",
-        "label": "Short break minutes",
-        "description": "Length of the short break after each focus phase.",
-        "defaultValue": 5
-      },
-      {
-        "key": "pomodoroCycles",
-        "type": "number",
-        "label": "Focus cycles",
-        "description": "Number of focus phases before the long break.",
-        "defaultValue": 4
-      },
-      {
-        "key": "pomodoroLongBreakMinutes",
-        "type": "number",
-        "label": "Long break minutes",
-        "description": "Length of the long break after the final focus cycle.",
-        "defaultValue": 15
-      },
-      {
-        "key": "pomodoroSound",
+        "key": "nowPlaying",
         "type": "boolean",
-        "label": "Pomodoro sounds",
-        "description": "Play a bell between phases and three bells when the cycle completes.",
+        "label": "Now-playing notifications",
+        "description": "Send a notification each time the song changes.",
+        "defaultValue": false
+      },
+      {
+        "key": "slot1Label",
+        "type": "string",
+        "label": "Soundtrack 1 name",
+        "defaultValue": "Lofi"
+      },
+      {
+        "key": "slot1Uri",
+        "type": "string",
+        "label": "Soundtrack 1 target",
+        "description": "Spotify playlist/album/artist URI or share URL, or the keyword 'liked'.",
+        "defaultValue": "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"
+      },
+      {
+        "key": "slot2Label",
+        "type": "string",
+        "label": "Soundtrack 2 name",
+        "defaultValue": "Nature"
+      },
+      {
+        "key": "slot2Uri",
+        "type": "string",
+        "label": "Soundtrack 2 target",
+        "defaultValue": "spotify:playlist:37i9dQZF1DX4PP3DA4J0N8"
+      },
+      {
+        "key": "slot3Label",
+        "type": "string",
+        "label": "Soundtrack 3 name",
+        "defaultValue": "Liked"
+      },
+      {
+        "key": "slot3Uri",
+        "type": "string",
+        "label": "Soundtrack 3 target",
+        "description": "A Spotify link, or 'liked' for your Liked Songs. Clear to hide the button.",
+        "defaultValue": "liked"
+      },
+      {
+        "key": "activeSlot",
+        "type": "number",
+        "label": "Active soundtrack",
+        "description": "Which soundtrack is selected (0, 1, or 2).",
+        "defaultValue": 2
+      },
+      {
+        "key": "soundsEnabled",
+        "type": "boolean",
+        "label": "Phase sounds",
+        "description": "Play a distinct sound at each phase boundary.",
         "defaultValue": true
+      },
+      {
+        "key": "shortBreakSound",
+        "type": "select",
+        "label": "Short-break sound",
+        "description": "Played when a focus block ends.",
+        "defaultValue": "bell",
+        "options": [
+          { "value": "bell", "label": "Bell" },
+          { "value": "complete", "label": "Complete" },
+          { "value": "message", "label": "Message" },
+          { "value": "message-new-instant", "label": "Message (instant)" },
+          { "value": "alarm-clock-elapsed", "label": "Alarm" },
+          { "value": "dialog-information", "label": "Info" },
+          { "value": "dialog-warning", "label": "Warning" },
+          { "value": "window-attention", "label": "Attention" },
+          { "value": "device-added", "label": "Device added" },
+          { "value": "service-login", "label": "Login" },
+          { "value": "service-logout", "label": "Logout" },
+          { "value": "power-plug", "label": "Power plug" },
+          { "value": "power-unplug", "label": "Power unplug" },
+          { "value": "phone-incoming-call", "label": "Phone" },
+          { "value": "camera-shutter", "label": "Shutter" }
+        ]
+      },
+      {
+        "key": "backToWorkSound",
+        "type": "select",
+        "label": "Back-to-work sound",
+        "description": "Played when a short break ends.",
+        "defaultValue": "complete",
+        "options": [
+          { "value": "bell", "label": "Bell" },
+          { "value": "complete", "label": "Complete" },
+          { "value": "message", "label": "Message" },
+          { "value": "message-new-instant", "label": "Message (instant)" },
+          { "value": "alarm-clock-elapsed", "label": "Alarm" },
+          { "value": "dialog-information", "label": "Info" },
+          { "value": "dialog-warning", "label": "Warning" },
+          { "value": "window-attention", "label": "Attention" },
+          { "value": "device-added", "label": "Device added" },
+          { "value": "service-login", "label": "Login" },
+          { "value": "service-logout", "label": "Logout" },
+          { "value": "power-plug", "label": "Power plug" },
+          { "value": "power-unplug", "label": "Power unplug" },
+          { "value": "phone-incoming-call", "label": "Phone" },
+          { "value": "camera-shutter", "label": "Shutter" }
+        ]
+      },
+      {
+        "key": "longBreakSound",
+        "type": "select",
+        "label": "Session-end sound",
+        "description": "Played when the final focus block ends (the session's long break).",
+        "defaultValue": "alarm-clock-elapsed",
+        "options": [
+          { "value": "bell", "label": "Bell" },
+          { "value": "complete", "label": "Complete" },
+          { "value": "message", "label": "Message" },
+          { "value": "message-new-instant", "label": "Message (instant)" },
+          { "value": "alarm-clock-elapsed", "label": "Alarm" },
+          { "value": "dialog-information", "label": "Info" },
+          { "value": "dialog-warning", "label": "Warning" },
+          { "value": "window-attention", "label": "Attention" },
+          { "value": "device-added", "label": "Device added" },
+          { "value": "service-login", "label": "Login" },
+          { "value": "service-logout", "label": "Logout" },
+          { "value": "power-plug", "label": "Power plug" },
+          { "value": "power-unplug", "label": "Power unplug" },
+          { "value": "phone-incoming-call", "label": "Phone" },
+          { "value": "camera-shutter", "label": "Shutter" }
+        ]
+      },
+      {
+        "key": "shortBreakVolume",
+        "type": "number",
+        "label": "Short-break sound volume",
+        "description": "0.0 – 1.0",
+        "defaultValue": 1
+      },
+      {
+        "key": "backToWorkVolume",
+        "type": "number",
+        "label": "Back-to-work sound volume",
+        "description": "0.0 – 1.0",
+        "defaultValue": 1
+      },
+      {
+        "key": "longBreakVolume",
+        "type": "number",
+        "label": "Session-end sound volume",
+        "description": "0.0 – 1.0",
+        "defaultValue": 1
+      },
+      {
+        "key": "focusGlyph",
+        "type": "string",
+        "label": "Focus glyph",
+        "description": "Glyph shown in the bar during focus.",
+        "defaultValue": "⌖"
+      },
+      {
+        "key": "breakGlyph",
+        "type": "string",
+        "label": "Break glyph",
+        "description": "Glyph shown in the bar during a break.",
+        "defaultValue": "☾"
       }
     ]
   }

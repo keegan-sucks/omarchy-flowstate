@@ -5,36 +5,37 @@ import qs.Commons
 import qs.Ui
 import "." as Core
 
-// Bar label + host for the Flowstate panel. Left-click opens the panel,
-// middle-click starts/pauses, right-click resets. The bar pill lights up in
-// the phase color while a Pomodoro session is running.
 BarWidget {
   id: root
   moduleName: "io.github.keegan-sucks.flowstate"
 
-  readonly property bool sessionVisible: Core.FocusState.mode === Core.FocusState.pomodoroMode
-    && Core.FocusState.pomodoroSessionStarted
+  readonly property bool active: Core.FocusState.isSessionActive
   readonly property bool onBreak: Core.FocusState.onBreak
-  readonly property color phaseColor: root.onBreak
-    ? Core.FocusState.pomodoroBreakColor
-    : Color.accent
+  readonly property color phaseColor: root.onBreak ? Core.FocusState.breakColor : Color.accent
 
   function configuredInt(key, fallback, minimum, maximum) {
-    var parsed = Number(root.setting(key, fallback))
-    if (!isFinite(parsed)) parsed = fallback
-    return Math.max(minimum, Math.min(maximum, Math.round(parsed)))
+    var v = Number(root.setting(key, fallback))
+    if (!isFinite(v)) v = fallback
+    return Math.max(minimum, Math.min(maximum, Math.round(v)))
+  }
+  function configuredReal(key, fallback, minimum, maximum) {
+    var v = Number(root.setting(key, fallback))
+    if (!isFinite(v)) v = fallback
+    return Math.max(minimum, Math.min(maximum, v))
   }
 
   function applySettings() {
     var st = Core.FocusState
-    st.configurePomodoro(
-      root.configuredInt("pomodoroWorkMinutes", 25, 1, 999),
-      root.configuredInt("pomodoroShortBreakMinutes", 5, 1, 999),
-      root.configuredInt("pomodoroCycles", 4, 1, 99),
-      root.configuredInt("pomodoroLongBreakMinutes", 15, 1, 999),
-      root.setting("pomodoroSound", true) !== false
-    )
-    st.focusEffects = root.setting("focusEffects", true) !== false
+    st.workMinutes = root.configuredInt("workMinutes", 25, 1, 999)
+    st.shortBreakMinutes = root.configuredInt("shortBreakMinutes", 5, 1, 999)
+    st.cycles = root.configuredInt("cycles", 4, 1, 99)
+
+    st.playSoundtrack = root.setting("playSoundtrack", true) !== false
+    st.spotifyVolume = root.configuredInt("spotifyVolume", 35, 0, 100)
+    st.alwaysShuffle = root.setting("alwaysShuffle", true) !== false
+    st.spotifyWorkspace = root.configuredInt("spotifyWorkspace", 9, 0, 99)
+    st.nowPlaying = root.setting("nowPlaying", false) === true
+
     st.slot1Label = String(root.setting("slot1Label", st.slot1Label))
     st.slot1Uri = String(root.setting("slot1Uri", st.slot1Uri))
     st.slot2Label = String(root.setting("slot2Label", st.slot2Label))
@@ -42,20 +43,17 @@ BarWidget {
     st.slot3Label = String(root.setting("slot3Label", st.slot3Label))
     st.slot3Uri = String(root.setting("slot3Uri", st.slot3Uri))
     st.setActiveSlot(root.configuredInt("activeSlot", 2, 0, 2))
-    st.spotifyVolume = root.configuredInt("spotifyVolume", 35, 0, 100)
-    st.alwaysShuffle = root.setting("alwaysShuffle", true) !== false
-    st.blockSites = root.setting("blockSites", true) !== false
-    st.catSocial = root.setting("catSocial", true) !== false
-    st.catVideo = root.setting("catVideo", true) !== false
-    st.catShopping = root.setting("catShopping", true) !== false
-    st.catNews = root.setting("catNews", true) !== false
-    st.catAdult = root.setting("catAdult", false) === true
-    st.extraDomains = String(root.setting("extraDomains", st.extraDomains))
-    st.openSpotify = root.setting("openSpotify", true) !== false
-    st.openObsidian = root.setting("openObsidian", true) !== false
-    st.isolateObsidian = root.setting("isolateObsidian", true) !== false
-    st.focusWorkspace = root.configuredInt("focusWorkspace", 0, 0, 99)
-    st.spotifyWorkspace = root.configuredInt("spotifyWorkspace", 9, 0, 99)
+
+    st.soundsEnabled = root.setting("soundsEnabled", true) !== false
+    st.shortBreakSound = String(root.setting("shortBreakSound", st.shortBreakSound))
+    st.backToWorkSound = String(root.setting("backToWorkSound", st.backToWorkSound))
+    st.longBreakSound = String(root.setting("longBreakSound", st.longBreakSound))
+    st.shortBreakVolume = root.configuredReal("shortBreakVolume", 1.0, 0, 1)
+    st.backToWorkVolume = root.configuredReal("backToWorkVolume", 1.0, 0, 1)
+    st.longBreakVolume = root.configuredReal("longBreakVolume", 1.0, 0, 1)
+
+    st.focusGlyph = String(root.setting("focusGlyph", st.focusGlyph))
+    st.breakGlyph = String(root.setting("breakGlyph", st.breakGlyph))
   }
 
   function injectPanel() {
@@ -99,37 +97,17 @@ BarWidget {
   }
 
   IpcHandler {
-    // Literal target: IpcHandler registers during construction, before the
-    // bar host has necessarily injected the widget's properties.
     target: "io.github.keegan-sucks.flowstate"
 
     function start(): string {
       if (!Core.FocusState.running) Core.FocusState.startPause()
       return Core.FocusState.statusText
     }
-    function pause(): string {
-      Core.FocusState.pause()
-      return Core.FocusState.statusText
-    }
-    function toggleTimer(): string {
-      Core.FocusState.startPause()
-      return Core.FocusState.statusText
-    }
-    function reset(): string {
-      Core.FocusState.reset()
-      return Core.FocusState.statusText
-    }
-    function skip(): string {
-      Core.FocusState.skipPomodoroPhase()
-      return Core.FocusState.statusText
-    }
-    function pomodoro(workMinutes: string, shortBreakMinutes: string, cycles: string, longBreakMinutes: string): string {
-      Core.FocusState.setPomodoroWorkMinutes(parseInt(workMinutes, 10) || 25)
-      Core.FocusState.setPomodoroShortBreakMinutes(parseInt(shortBreakMinutes, 10) || 5)
-      Core.FocusState.setPomodoroCycles(parseInt(cycles, 10) || 4)
-      Core.FocusState.setPomodoroLongBreakMinutes(parseInt(longBreakMinutes, 10) || 15)
-      return Core.FocusState.statusText
-    }
+    function pause(): string { Core.FocusState.pause(); return Core.FocusState.statusText }
+    function toggleTimer(): string { Core.FocusState.startPause(); return Core.FocusState.statusText }
+    function reset(): string { Core.FocusState.reset(); return Core.FocusState.statusText }
+    function skip(): string { Core.FocusState.skip(); return Core.FocusState.statusText }
+    function next(): string { Core.FocusState.nextTrack(); return Core.FocusState.statusText }
 
     function open() { root.open() }
     function close() { root.close() }
@@ -139,19 +117,13 @@ BarWidget {
 
     function status(): string {
       return JSON.stringify({
-        mode: Core.FocusState.modeName,
+        phase: Core.FocusState.phase,
         running: Core.FocusState.running,
-        completed: Core.FocusState.completed,
+        label: Core.FocusState.phaseLabel,
+        dots: Core.FocusState.dotsText,
         display: Core.FocusState.displayText,
-        status: Core.FocusState.statusText,
-        phase: Core.FocusState.mode === Core.FocusState.pomodoroMode
-          ? Core.FocusState.pomodoroPhase.label
-          : "",
-        completedPomodoros: Core.FocusState.mode === Core.FocusState.pomodoroMode
-          ? Core.FocusState.pomodoroCompletedCycles
-          : 0,
-        focusActive: Core.FocusState.focusActive,
-        soundtrack: Core.FocusState.slotLabel(Core.FocusState.activeSlot)
+        soundtrack: Core.FocusState.slotLabel(Core.FocusState.activeSlot),
+        focusActive: Core.FocusState.focusActive
       })
     }
   }
@@ -167,7 +139,7 @@ BarWidget {
       ? -1
       : timerRow.implicitWidth + button.scaledHorizontalMargin * 2
     active: Core.FocusState.running
-    tooltipText: Core.FocusState.modeName + " · " + Core.FocusState.statusText
+    tooltipText: "Flowstate · " + Core.FocusState.statusText
     onPressed: function(b) {
       if (b === Qt.MiddleButton) Core.FocusState.startPause()
       else if (b === Qt.RightButton) Core.FocusState.reset()
@@ -178,13 +150,9 @@ BarWidget {
       anchors.fill: parent
       anchors.margins: Style.space(2)
       radius: height / 2
-      visible: root.sessionVisible
-      color: Qt.rgba(
-        root.phaseColor.r,
-        root.phaseColor.g,
-        root.phaseColor.b,
-        Core.FocusState.running ? 0.18 : 0.10
-      )
+      visible: root.active
+      color: Qt.rgba(root.phaseColor.r, root.phaseColor.g, root.phaseColor.b,
+                     Core.FocusState.running ? 0.18 : 0.10)
     }
 
     Row {
@@ -193,12 +161,20 @@ BarWidget {
       spacing: Style.space(5)
 
       Text {
-        text: root.onBreak ? "󰅶" : "◷"
-        color: root.sessionVisible
-          ? root.phaseColor
-          : button.active ? button.activeColor : button.foreground
+        text: Core.FocusState.glyph
+        color: root.active ? root.phaseColor : (button.active ? button.activeColor : button.foreground)
         font.family: button.fontFamily
-        font.pixelSize: Math.round(Style.font.iconLarge * 1.15)
+        font.pixelSize: Math.round(Style.font.iconLarge * 1.1)
+        renderType: Text.NativeRendering
+        anchors.verticalCenter: parent.verticalCenter
+      }
+
+      Text {
+        visible: !root.vertical && root.active
+        text: Core.FocusState.dotsText
+        color: root.active ? root.phaseColor : button.foreground
+        font.family: button.fontFamily
+        font.pixelSize: Math.round(button.fontSize * 0.85)
         renderType: Text.NativeRendering
         anchors.verticalCenter: parent.verticalCenter
       }
@@ -206,9 +182,7 @@ BarWidget {
       Text {
         visible: !root.vertical && Core.FocusState.barTimeText !== ""
         text: Core.FocusState.barTimeText
-        color: root.sessionVisible
-          ? root.phaseColor
-          : button.active ? button.activeColor : button.foreground
+        color: root.active ? root.phaseColor : button.foreground
         font.family: button.fontFamily
         font.pixelSize: button.fontSize
         renderType: Text.NativeRendering
