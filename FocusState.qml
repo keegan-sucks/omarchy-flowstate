@@ -43,8 +43,8 @@ Item {
   // Three editable soundtrack slots. A target of "liked" plays Liked Songs.
   property string slot1Label: "Lofi"
   property string slot1Uri: "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"
-  property string slot2Label: "Nature"
-  property string slot2Uri: "spotify:playlist:37i9dQZF1DX4PP3DA4J0N8"
+  property string slot2Label: "Discover Weekly"
+  property string slot2Uri: "spotify:playlist:37i9dQZEVXcRAcxrqHLe1Q"
   property string slot3Label: "Liked"
   property string slot3Uri: "liked"
   property int activeSlot: 2                    // 0-based; Liked by default

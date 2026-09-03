@@ -125,7 +125,7 @@ Three soundtrack slots. Open the panel → **⚙ Edit** and set each slot's name
 - a URI — `spotify:playlist:…` (playlists, albums, and artists all work)
 - or the keyword **`liked`** to shuffle your **Liked Songs**
 
-Defaults are **Lofi**, **Nature**, and **Liked** (selected). Clear a slot's target to
+Defaults are **Lofi**, **Discover Weekly**, and **Liked** (selected). Clear a slot's target to
 hide its button. **Always shuffle** starts on a random track (contexts are muted,
 shuffled, and skipped a few tracks in, then unmuted — a varied first song with no
 blips). The **Focus volume** slider sets the session volume; your pre-session volume
@@ -164,7 +164,7 @@ omarchy bar set io.github.keegan-sucks.flowstate <key> <value>
 | `alwaysShuffle` | `true` | Shuffle + random start |
 | `spotifyWorkspace` | `9` | Workspace to move the player to (0 = leave it) |
 | `nowPlaying` | `false` | Notify on each song change |
-| `slot1Label`/`slot1Uri` … `slot3*` | Lofi / Nature / Liked | Soundtrack slots (`liked` = Liked Songs) |
+| `slot1Label`/`slot1Uri` … `slot3*` | Lofi / Discover Weekly / Liked | Soundtrack slots (`liked` = Liked Songs) |
 | `activeSlot` | `2` | Selected slot (0–2) |
 | `soundsEnabled` | `true` | Play phase-boundary sounds |
 | `shortBreakSound` / `backToWorkSound` / `longBreakSound` | bell / complete / alarm-clock-elapsed | Per-cue sound |

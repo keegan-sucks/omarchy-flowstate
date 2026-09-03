@@ -92,13 +92,14 @@
         "key": "slot2Label",
         "type": "string",
         "label": "Soundtrack 2 name",
-        "defaultValue": "Nature"
+        "defaultValue": "Discover Weekly"
       },
       {
         "key": "slot2Uri",
         "type": "string",
         "label": "Soundtrack 2 target",
-        "defaultValue": "spotify:playlist:37i9dQZF1DX4PP3DA4J0N8"
+        "description": "Defaults to the author's Discover Weekly (per-user — set your own).",
+        "defaultValue": "spotify:playlist:37i9dQZEVXcRAcxrqHLe1Q"
       },
       {
         "key": "slot3Label",
