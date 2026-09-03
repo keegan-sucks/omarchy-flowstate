@@ -91,14 +91,15 @@ sp_running() { pgrep -x spotify_player >/dev/null 2>&1; }
 SP_DEVICE="${FLOWSTATE_SP_DEVICE:-spotify-player}"
 sp_wait_device() {
   local i devs name
-  for i in $(seq 1 60); do
+  sleep 3   # let the freshly launched player settle before the first API call
+  for i in $(seq 1 24); do
     devs="$(sp get key devices)"
     if [ -n "$devs" ]; then
       name="$(echo "$devs" | jq -r --arg d "$SP_DEVICE" \
         '[.[] | select((.name // "" | ascii_downcase) | contains($d | ascii_downcase))][0].name // empty' 2>/dev/null)"
       [ -n "$name" ] && { echo "$name"; return 0; }
     fi
-    sleep 0.5
+    sleep 2   # gentle: Spotify's Web API rate-limits (429) aggressive polling
   done
   return 1
 }
@@ -110,12 +111,10 @@ sp_device_volume()   { sp get key playback | jq -r '.device.volume_percent // em
 sp_track_name()      { sp get key playback | jq -r '.item.name // empty' 2>/dev/null; }
 
 sp_ensure_shuffle_on() {
-  local i
-  for i in 1 2 3; do
-    [ "$(sp_shuffle_state)" = "true" ] && return 0
-    sp playback shuffle >/dev/null 2>&1
-    sleep 0.5
-  done
+  [ "$(sp_shuffle_state)" = "true" ] && return 0
+  sp playback shuffle >/dev/null 2>&1
+  sleep 1
+  [ "$(sp_shuffle_state)" = "true" ] || sp playback shuffle >/dev/null 2>&1
 }
 
 # Repeat the whole context (playlist / liked). Starting playback resets repeat to
@@ -176,12 +175,12 @@ start_soundtrack() {
 # device can ignore the first request while it settles).
 start_soundtrack_verified() {
   local i
-  for i in 1 2 3 4; do
+  for i in 1 2 3; do
     start_soundtrack || return 1
-    sleep 2
+    sleep 3
     [ "$(sp_playback_status)" = "true" ] && { log "playing (attempt $i)"; return 0; }
     sp playback play >/dev/null 2>&1
-    sleep 1
+    sleep 2
     [ "$(sp_playback_status)" = "true" ] && { log "playing after play (attempt $i)"; return 0; }
   done
   return 1
@@ -209,7 +208,7 @@ start_nowplay_watcher() {
           notify "♪ $msg"
         fi
       fi
-      sleep 3
+      sleep 10
     done
   ) >/dev/null 2>&1 &
   echo $! > "$NOWPLAY_PID_FILE"
@@ -232,7 +231,7 @@ engage() {
     return
   fi
   local i
-  for i in $(seq 1 8); do sp connect --name "$dev" >/dev/null 2>&1 && break; sleep 1; done
+  for i in $(seq 1 4); do sp connect --name "$dev" >/dev/null 2>&1 && break; sleep 1.5; done
   log "connected to device: $dev"
 
   # Remember the pre-session device volume so it can be restored on stop.
@@ -286,10 +285,13 @@ do_resume() {
   log "resume: play"
   have spotify_player && sp_running || return 0
   sp playback play >/dev/null 2>&1
-  sleep 0.8
-  # Spotify can deactivate the librespot device during a break, so a bare play
-  # has no track to resume — reconnect and restart the soundtrack.
-  [ -z "$(sp_track_name)" ] && { log "resume: device dropped, re-engaging"; engage; }
+  sleep 1
+  [ "$(sp_playback_status)" = "true" ] && return 0
+  # Spotify can deactivate the librespot device during a break. Reconnect + play
+  # once (gently — a full re-engage here caused overlapping starts and API 429s).
+  sp connect --name "$SP_DEVICE" >/dev/null 2>&1
+  sleep 1
+  sp playback play >/dev/null 2>&1
 }
 
 do_next() {
