@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.keegan-sucks.flowstate",
   "name": "Flowstate",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "keegan-sucks",
   "license": "MIT",
-  "description": "A Pomodoro focus timer for the Omarchy bar with a spotify_player soundtrack (Liked-Songs shuffle included) that pauses on breaks, and distinct phase-boundary sounds.",
+  "description": "A Pomodoro focus timer for the Omarchy bar that drives the official Spotify app: a shuffled soundtrack that pauses on breaks, Liked Songs via a mirror playlist, and distinct phase-boundary sounds.",
   "kinds": [
     "bar-widget"
   ],
@@ -44,14 +44,14 @@
         "key": "playSoundtrack",
         "type": "boolean",
         "label": "Play soundtrack",
-        "description": "Start a spotify_player soundtrack when a session begins; pause it during breaks; restore + pause it at the end.",
+        "description": "Drive the Spotify desktop app: start the active slot (shuffled, ducked) when a session begins; pause it during breaks; restore the volume + pause at the end.",
         "defaultValue": true
       },
       {
         "key": "spotifyVolume",
         "type": "number",
         "label": "Focus volume (%)",
-        "description": "Volume the soundtrack is ducked to during focus (0-100). The pre-session volume is restored on stop.",
+        "description": "Spotify's volume during focus (0-100). The pre-session volume is restored on stop.",
         "defaultValue": 35
       },
       {
@@ -64,16 +64,9 @@
       {
         "key": "spotifyWorkspace",
         "type": "number",
-        "label": "Player workspace",
-        "description": "Workspace to move the spotify_player terminal to (silently). 0 leaves it in place.",
+        "label": "Spotify workspace",
+        "description": "When Flowstate has to launch Spotify, it opens straight on this workspace, silently and unfocused. 0 opens it where you are (still unfocused). An already-running Spotify is never moved.",
         "defaultValue": 9
-      },
-      {
-        "key": "nowPlaying",
-        "type": "boolean",
-        "label": "Now-playing notifications",
-        "description": "Send a notification each time the song changes.",
-        "defaultValue": false
       },
       {
         "key": "slot1Label",
@@ -85,41 +78,41 @@
         "key": "slot1Uri",
         "type": "string",
         "label": "Soundtrack 1 target",
-        "description": "Spotify playlist/album/artist URI or share URL, or the keyword 'liked'.",
+        "description": "Spotify playlist/album/artist URI or open.spotify.com link. Default: Spotify's Lofi Beats.",
         "defaultValue": "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"
       },
       {
         "key": "slot2Label",
         "type": "string",
         "label": "Soundtrack 2 name",
-        "defaultValue": "Discover Weekly"
+        "defaultValue": "Deep Focus"
       },
       {
         "key": "slot2Uri",
         "type": "string",
         "label": "Soundtrack 2 target",
-        "description": "Defaults to the author's Discover Weekly (per-user — set your own).",
-        "defaultValue": "spotify:playlist:37i9dQZEVXcRAcxrqHLe1Q"
+        "description": "Spotify playlist/album/artist URI or open.spotify.com link. Default: Spotify's Deep Focus.",
+        "defaultValue": "spotify:playlist:37i9dQZF1DWZeKCadgRdKQ"
       },
       {
         "key": "slot3Label",
         "type": "string",
         "label": "Soundtrack 3 name",
-        "defaultValue": "Liked"
+        "defaultValue": "Piano"
       },
       {
         "key": "slot3Uri",
         "type": "string",
         "label": "Soundtrack 3 target",
-        "description": "A Spotify link, or 'liked' for your Liked Songs. Clear to hide the button.",
-        "defaultValue": "liked"
+        "description": "Spotify playlist/album/artist URI or open.spotify.com link. Default: Spotify's Peaceful Piano. For Liked Songs, use a mirror playlist (README → Liked Songs). Clear to hide the button.",
+        "defaultValue": "spotify:playlist:37i9dQZF1DX4sWSpwq3LiO"
       },
       {
         "key": "activeSlot",
         "type": "number",
         "label": "Active soundtrack",
         "description": "Which soundtrack is selected (0, 1, or 2).",
-        "defaultValue": 2
+        "defaultValue": 0
       },
       {
         "key": "soundsEnabled",
@@ -236,5 +229,7 @@
         "defaultValue": "☾"
       }
     ]
-  }
+  },
+  "homepage": "https://github.com/keegan-sucks/omarchy-flowstate",
+  "repository": "https://github.com/keegan-sucks/omarchy-flowstate"
 }
