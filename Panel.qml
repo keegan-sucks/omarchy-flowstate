@@ -78,7 +78,6 @@ Panel {
 
   function setPlaySoundtrack(on) { Core.FocusState.playSoundtrack = Boolean(on); root.persistSettings({ playSoundtrack: Core.FocusState.playSoundtrack }) }
   function setAlwaysShuffle(on) { Core.FocusState.alwaysShuffle = Boolean(on); root.persistSettings({ alwaysShuffle: Core.FocusState.alwaysShuffle }) }
-  function setNowPlaying(on) { Core.FocusState.nowPlaying = Boolean(on); root.persistSettings({ nowPlaying: Core.FocusState.nowPlaying }) }
   function setSoundsEnabled(on) { Core.FocusState.soundsEnabled = Boolean(on); root.persistSettings({ soundsEnabled: Core.FocusState.soundsEnabled }) }
   function setWorkspace(v) {
     var n = Math.max(0, Math.min(99, Math.round(Number(v))))
@@ -365,7 +364,7 @@ Panel {
             Toggle {
               width: parent.width
               label: "Play soundtrack"
-              description: "Start music on focus; pause on breaks; restore on stop"
+              description: "Drive the Spotify app: start on focus, pause on breaks, restore volume on stop"
               checked: Core.FocusState.playSoundtrack
               foreground: root.contentForeground; fontFamily: root.contentFontFamily
               onClicked: root.setPlaySoundtrack(!Core.FocusState.playSoundtrack)
@@ -377,14 +376,6 @@ Panel {
               checked: Core.FocusState.alwaysShuffle
               foreground: root.contentForeground; fontFamily: root.contentFontFamily
               onClicked: root.setAlwaysShuffle(!Core.FocusState.alwaysShuffle)
-            }
-            Toggle {
-              width: parent.width
-              label: "Now-playing notifications"
-              description: "Notify each time the song changes"
-              checked: Core.FocusState.nowPlaying
-              foreground: root.contentForeground; fontFamily: root.contentFontFamily
-              onClicked: root.setNowPlaying(!Core.FocusState.nowPlaying)
             }
             // Volume
             Column {
@@ -405,7 +396,7 @@ Panel {
             // Player workspace
             Row {
               width: parent.width; spacing: Style.space(10)
-              Text { text: "Player workspace"; color: root.contentForeground; font.family: root.contentFontFamily; font.pixelSize: Style.font.body; anchors.verticalCenter: parent.verticalCenter; width: parent.width - wsField.width - parent.spacing }
+              Text { text: "Spotify workspace (when Flowstate launches it; 0 = leave)"; color: root.contentForeground; font.family: root.contentFontFamily; font.pixelSize: Style.font.body; anchors.verticalCenter: parent.verticalCenter; width: parent.width - wsField.width - parent.spacing }
               CompactField {
                 id: wsField
                 width: Style.space(90); fieldWidth: width
@@ -437,13 +428,60 @@ Panel {
                 TextField {
                   width: parent.width - slotLabelField.width - parent.spacing
                   text: Core.FocusState.slotUri(slotRow.index)
-                  placeholderText: "spotify:… or 'liked' (empty to hide)"
+                  placeholderText: "spotify:playlist:… or open.spotify.com link (empty to hide)"
                   foreground: root.contentForeground; font.family: root.contentFontFamily
                   onEditingFinished: root.setSlotTarget(slotRow.index, text)
                   Keys.onReturnPressed: { root.setSlotTarget(slotRow.index, text); focus = false }
                   Keys.onEscapePressed: focus = false
                 }
               }
+            }
+
+            Text {
+              width: parent.width
+              text: "Target: a Spotify playlist, album, or artist — its URI (spotify:playlist:…) or open.spotify.com link. Switch slots live during focus."
+              color: Qt.darker(root.contentForeground, 1.4)
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            // ---- Liked Songs ----
+            PanelSectionHeader { text: "LIKED SONGS"; foreground: root.contentForeground; fontFamily: root.contentFontFamily }
+            Text {
+              width: parent.width
+              visible: Core.FocusState.anySlotNeedsMirror
+              text: "⚠ A slot still says 'liked' — Spotify can't play that directly. Replace it with a mirror playlist (below)."
+              color: Core.FocusState.breakColor
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              wrapMode: Text.WordWrap
+            }
+            Text {
+              width: parent.width
+              text: "Spotify can't shuffle Liked Songs directly, so point a slot at a mirror playlist. Easiest, no setup: in Spotify open Liked Songs → Ctrl-A → right-click → Add to playlist → New playlist, then paste that playlist's link into a slot above."
+              color: Qt.darker(root.contentForeground, 1.4)
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+            Button {
+              text: "Auto-refresh Liked Songs…"
+              iconText: "⟳"
+              fontSize: Style.font.bodySmall
+              foreground: root.contentForeground
+              fontFamily: root.contentFontFamily
+              bordered: true
+              onClicked: Core.FocusState.openLikedSetup()
+            }
+            Text {
+              width: parent.width
+              text: "Optional — builds the mirror for you and keeps it in sync weekly. Needs your own free Spotify app (just a Client ID — no password, no secret). Opens a guided setup in a terminal."
+              color: Qt.darker(root.contentForeground, 1.4)
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
             }
 
             PanelSeparator { foreground: root.contentForeground }

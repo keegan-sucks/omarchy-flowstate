@@ -2,3 +2,12 @@
 *.bak.*
 *~
 .DS_Store
+
+# Spotify OAuth token cache from scripts/sync-liked-playlist.py (contains tokens)
+liked-sync-token.json
+.cache-*
+sync.env
+
+# Python bytecode
+__pycache__/
+*.pyc

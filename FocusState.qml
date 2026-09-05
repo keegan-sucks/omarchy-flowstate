@@ -9,10 +9,10 @@ import Quickshell
 //   focus 1 → short → focus 2 → short → … → focus `cycles`, then the session
 //   ENDS with a long-break cue (there is NO timed long break).
 //
-// A running session drives a Spotify soundtrack via scripts/flowstate-session.sh
-// (spotify_player): started once at the beginning, PAUSED during short breaks and
-// RESUMED when focus returns, and stopped (volume restored + paused) at the end.
-// Distinct phase-boundary sounds play at each transition.
+// A running session drives the OFFICIAL Spotify desktop app (over MPRIS, via
+// scripts/flowstate-session.sh): started once at the beginning, PAUSED during short
+// breaks and RESUMED when focus returns, and stopped (volume restored + paused) at
+// the end. Distinct phase-boundary sounds play at each transition.
 Item {
   id: root
 
@@ -33,21 +33,24 @@ Item {
 
   property color breakColor: "#a6e3a1"
 
-  // --- Soundtrack (spotify_player) ----------------------------------------
+  // --- Soundtrack (official Spotify app) -----------------------------------
   property bool playSoundtrack: true
   property int spotifyVolume: 35
   property bool alwaysShuffle: true
-  property int spotifyWorkspace: 9             // 0 leaves the player where it is
-  property bool nowPlaying: false              // notify on each song change
+  property int spotifyWorkspace: 9             // where a freshly launched Spotify goes; 0 = leave it
 
-  // Three editable soundtrack slots. A target of "liked" plays Liked Songs.
+  // Three editable soundtrack slots. A target is any Spotify playlist / album /
+  // artist URI or open.spotify.com link. Defaults are three of Spotify's own public
+  // focus playlists so a fresh install plays immediately with zero setup. To use
+  // your Liked Songs, point a slot at a *mirror* playlist (see openLikedSetup()) —
+  // the desktop app can't shuffle Liked Songs directly.
   property string slot1Label: "Lofi"
-  property string slot1Uri: "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"
-  property string slot2Label: "Discover Weekly"
-  property string slot2Uri: "spotify:playlist:37i9dQZEVXcRAcxrqHLe1Q"
-  property string slot3Label: "Liked"
-  property string slot3Uri: "liked"
-  property int activeSlot: 2                    // 0-based; Liked by default
+  property string slot1Uri: "spotify:playlist:37i9dQZF1DWWQRwui0ExPn"   // Lofi Beats
+  property string slot2Label: "Deep Focus"
+  property string slot2Uri: "spotify:playlist:37i9dQZF1DWZeKCadgRdKQ"   // Deep Focus
+  property string slot3Label: "Piano"
+  property string slot3Uri: "spotify:playlist:37i9dQZF1DX4sWSpwq3LiO"   // Peaceful Piano
+  property int activeSlot: 0                    // 0-based
 
   // --- Phase-boundary sounds (freedesktop .oga names, minus extension) -----
   property bool soundsEnabled: true
@@ -66,10 +69,11 @@ Item {
   // across pauses and breaks; the break/resume actions pause/play within it.
   property bool focusActive: false
 
-  readonly property string sessionScript: {
-    var u = Qt.resolvedUrl("scripts/flowstate-session.sh").toString()
-    return u.replace(/^file:\/\//, "")
+  function scriptPath(name) {
+    return Qt.resolvedUrl("scripts/" + name).toString().replace(/^file:\/\//, "")
   }
+  readonly property string sessionScript: scriptPath("flowstate-session.sh")
+  readonly property string likedSetupScript: scriptPath("setup-liked.sh")
 
   // --- Derived state -------------------------------------------------------
   readonly property bool isSessionActive: phase !== "idle"
@@ -246,6 +250,14 @@ Item {
   function slotUri(i)   { return i === 0 ? slot1Uri : i === 1 ? slot2Uri : slot3Uri }
   function slotConfigured(i) { return String(slotUri(i)).length > 0 }
 
+  // A legacy "liked" keyword (from the spotify_player era) can't be played by the
+  // Spotify app — it needs a mirror playlist. Surfaced in the panel as a hint.
+  function isLikedKeyword(u) {
+    var s = String(u || "").trim().toLowerCase()
+    return s === "liked" || s === "likes" || s.indexOf(":collection") !== -1
+  }
+  readonly property bool anySlotNeedsMirror: isLikedKeyword(slot1Uri) || isLikedKeyword(slot2Uri) || isLikedKeyword(slot3Uri)
+
   function focusPlaylist() {
     var u = slotUri(activeSlot)
     if (u && u.length) return u
@@ -254,13 +266,19 @@ Item {
   }
 
   // --- Soundtrack orchestration (scripts/flowstate-session.sh) --------------
-  // Arg order MUST match the script: <action> <playlist> <volume> <workspace>
-  //                                  <shuffle 0|1> <nowPlaying 0|1>
+  // Arg order MUST match the script: <action> <target> <volume> <workspace> <shuffle 0|1>
   function runSession(action) {
     Quickshell.execDetached([
       "bash", sessionScript, action,
       focusPlaylist(), String(spotifyVolume), String(spotifyWorkspace),
-      alwaysShuffle ? "1" : "0", nowPlaying ? "1" : "0"
+      alwaysShuffle ? "1" : "0"
+    ])
+  }
+
+  // Open the guided (optional) Liked-Songs auto-refresh setup in a floating terminal.
+  function openLikedSetup() {
+    Quickshell.execDetached([
+      "omarchy-launch-floating-terminal-with-presentation", "bash", likedSetupScript
     ])
   }
 

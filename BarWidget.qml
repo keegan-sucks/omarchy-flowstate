@@ -34,7 +34,6 @@ BarWidget {
     st.spotifyVolume = root.configuredInt("spotifyVolume", 35, 0, 100)
     st.alwaysShuffle = root.setting("alwaysShuffle", true) !== false
     st.spotifyWorkspace = root.configuredInt("spotifyWorkspace", 9, 0, 99)
-    st.nowPlaying = root.setting("nowPlaying", false) === true
 
     st.slot1Label = String(root.setting("slot1Label", st.slot1Label))
     st.slot1Uri = String(root.setting("slot1Uri", st.slot1Uri))
@@ -42,7 +41,7 @@ BarWidget {
     st.slot2Uri = String(root.setting("slot2Uri", st.slot2Uri))
     st.slot3Label = String(root.setting("slot3Label", st.slot3Label))
     st.slot3Uri = String(root.setting("slot3Uri", st.slot3Uri))
-    st.setActiveSlot(root.configuredInt("activeSlot", 2, 0, 2))
+    st.setActiveSlot(root.configuredInt("activeSlot", 0, 0, 2))
 
     st.soundsEnabled = root.setting("soundsEnabled", true) !== false
     st.shortBreakSound = String(root.setting("shortBreakSound", st.shortBreakSound))
