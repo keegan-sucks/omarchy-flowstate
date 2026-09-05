@@ -65,7 +65,7 @@
         "key": "spotifyWorkspace",
         "type": "number",
         "label": "Spotify workspace",
-        "description": "When Flowstate has to launch Spotify, move its window to this workspace (silently, without stealing focus). 0 leaves it where it opens; an already-running Spotify is never moved.",
+        "description": "When Flowstate has to launch Spotify, it opens straight on this workspace, silently and unfocused. 0 opens it where you are (still unfocused). An already-running Spotify is never moved.",
         "defaultValue": 9
       },
       {

@@ -59,8 +59,10 @@ the Spotify you already use (over MPRIS/D-Bus):
 
 - starts **shuffled**, on a varied track (not always track 1), ducked to a quiet focus
   volume, with repeat on so a block never falls silent;
-- if Flowstate has to launch Spotify, the window is moved to a far-off workspace
-  (default **9**) silently, without stealing focus; an already-open Spotify is left alone;
+- everything happens **in the background**: if Flowstate has to launch Spotify, it opens
+  straight on a far-off workspace (default **9**), unfocused; and while a session runs
+  Spotify is barred from yanking you to its workspace when it loads a playlist (Hyprland
+  honours Spotify's "activate me" request by default). An already-open Spotify is never moved;
 - **pauses during each short break** and **resumes** when focus returns;
 - at the end, **restores your previous volume and pauses** (Spotify is left open).
 
@@ -194,7 +196,7 @@ omarchy bar set io.github.keegan-sucks.flowstate <key> <value>
 | `playSoundtrack` | `true` | Drive the Spotify app during sessions |
 | `spotifyVolume` | `35` | Focus volume (0–100); previous restored on stop |
 | `alwaysShuffle` | `true` | Shuffle + random start |
-| `spotifyWorkspace` | `9` | Workspace a *freshly launched* Spotify is moved to (0 = leave it) |
+| `spotifyWorkspace` | `9` | Workspace a *freshly launched* Spotify opens on, silently (0 = where you are, still unfocused) |
 | `slot1Label`/`slot1Uri` … `slot3*` | Lofi / Deep Focus / Piano | Soundtrack slots (playlist/album/artist URI or link) |
 | `activeSlot` | `0` | Selected slot (0–2) |
 | `soundsEnabled` | `true` | Play phase-boundary sounds |
@@ -214,6 +216,19 @@ id=io.github.keegan-sucks.flowstate
 omarchy-shell "$id" status
 omarchy-shell "$id" start        # pause | toggleTimer | skip | next | reset
 omarchy-shell "$id" open         # close | toggle
+```
+
+**How the background behaviour works (Hyprland):** Spotify is launched via Hyprland's exec
+dispatcher with per-launch rules (`[workspace N silent; noinitialfocus]`), so nothing
+persists. When it receives a playlist, Spotify asks the compositor to activate its
+window and Omarchy's Hyprland honours that (`misc.focus_on_activate`), so for the
+duration of a session Flowstate enables a runtime window rule
+(`focus_on_activate = false` for the Spotify class) and disables it again at stop —
+Hyprland can only disable, not remove, runtime rules. If you'd rather Spotify *never*
+steal focus, make it permanent in `~/.config/hypr/hyprland.lua`:
+
+```lua
+o.window("Spotify", { focus_on_activate = false })
 ```
 
 The soundtrack script can also be driven by hand for debugging

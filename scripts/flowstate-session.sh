@@ -6,7 +6,7 @@
 # Usage:
 #   flowstate-session.sh <on|off|break|resume|next> <target> <volume> <workspace> <shuffle 0|1>
 #
-#   on      start the soundtrack (launch Spotify if needed, random-start, duck volume)
+#   on      start the soundtrack (launch Spotify in the background if needed, random-start, duck)
 #   off     restore the previous volume and pause (Spotify is left open)
 #   break   pause during a short break
 #   resume  resume when focus returns (restarts the context if Spotify lost it)
@@ -72,11 +72,49 @@ sp_wait_up() {  # wait for the MPRIS name to appear (Spotify freshly launched)
   return 1
 }
 
-# --- Launch + Hyprland placement --------------------------------------------
+# --- Hyprland: keep Spotify entirely in the background -----------------------
+#
+# Two things make Spotify grab your screen, and both are handled here:
+#  1. A freshly launched window maps on the current workspace with focus. So Spotify
+#     is launched through Hyprland's exec dispatcher with per-launch rules
+#     ("[workspace N silent; noinitialfocus] …") — it opens straight on the music
+#     workspace, unfocused, and nothing persists. Fallback: plain launch + silent move.
+#  2. On OpenUri, Spotify asks the compositor to ACTIVATE its window (as if you had
+#     clicked a spotify: link) and Omarchy's Hyprland honours that
+#     (misc.focus_on_activate), yanking you to Spotify's workspace — and it does the
+#     same once while starting up. A per-window rule (focus_on_activate = false),
+#     enabled before launch, stops it. Hyprland can't remove runtime rules, only
+#     disable them, so the handle is kept in a Lua global and toggled: enabled while a
+#     session runs, disabled again at stop so Spotify behaves normally afterwards.
 
-launch_spotify() {
-  if have uwsm-app; then setsid uwsm-app -- spotify >/dev/null 2>&1 &
-  else setsid spotify >/dev/null 2>&1 & fi
+SPOTIFY_MATCH='^([Ss]potify)$'
+hypr_ok() { [ "$(hyprctl "$@" 2>/dev/null)" = "ok" ]; }   # hyprctl exits 0 even on errors
+
+spotify_quiet_rule() {  # <true|false>
+  have hyprctl || return 0
+  hypr_ok eval "
+    flowstate_rules = flowstate_rules or {}
+    local ok = flowstate_rules.focus and pcall(function() flowstate_rules.focus:set_enabled($1) end)
+    if not ok and $1 then
+      flowstate_rules.focus = hl.window_rule({ match = { class = '$SPOTIFY_MATCH' }, focus_on_activate = false })
+    end" && return 0
+  # Pre-Lua Hyprland: best effort, enable only (legacy rules can't be toggled either).
+  [ "$1" = true ] && hyprctl keyword windowrulev2 "focusonactivate 0, class:$SPOTIFY_MATCH" >/dev/null 2>&1
+  return 0
+}
+
+LAUNCH_NEEDS_MOVE=0
+launch_spotify() {  # <workspace>
+  local cmd="spotify" rules="noinitialfocus"
+  have uwsm-app && cmd="uwsm-app -- spotify"
+  [ "$1" -gt 0 ] 2>/dev/null && rules="workspace $1 silent; noinitialfocus"
+  if have hyprctl; then
+    hypr_ok dispatch "hl.dsp.exec_cmd(\"[$rules] $cmd\")" && { log "launched via exec_cmd [$rules]"; return 0; }
+    hypr_ok dispatch exec "[$rules] $cmd" && { log "launched via legacy exec [$rules]"; return 0; }
+  fi
+  log "launched plainly (will move the window)"
+  setsid $cmd >/dev/null 2>&1 &
+  LAUNCH_NEEDS_MOVE=1
 }
 
 hypr_addr_by_class() {  # case-insensitive class match -> window addresses
@@ -92,8 +130,8 @@ move_window_to_ws() {  # <address> <workspace>
     || hyprctl dispatch movetoworkspacesilent "$2,address:$1" >/dev/null 2>&1
 }
 
-# Move a freshly launched Spotify window to the music workspace, silently, so it
-# never lands on (or steals focus from) the workspace you are working in.
+# Fallback placement (only when the exec-dispatcher rules were unavailable): move a
+# freshly launched Spotify window to the music workspace, silently.
 place_class_on_ws() {  # <class> <ws>
   local cls="$1" ws="$2" a i
   [ "$ws" -gt 0 ] 2>/dev/null || return 0
@@ -177,12 +215,16 @@ engage() {
     return 1
   fi
 
+  # Enable the quiet rule BEFORE launching: Spotify also requests activation of its
+  # window while it starts up (not only on OpenUri), so the rule must already exist.
+  spotify_quiet_rule true
+
   local launched=0
   if ! sp_up; then
     have spotify || { notify "Spotify isn't installed (omarchy pkg aur add spotify)"; return 1; }
     log "launching spotify"
-    launch_spotify; launched=1
-    place_class_on_ws "$SPOTIFY_CLASS" "$SPOTIFY_WS" &
+    launch_spotify "$SPOTIFY_WS"; launched=1
+    [ "$LAUNCH_NEEDS_MOVE" = 1 ] && place_class_on_ws "$SPOTIFY_CLASS" "$SPOTIFY_WS" &
     if ! sp_wait_up; then
       notify "Spotify didn't come up — is it logged in?"
       return 1
@@ -225,6 +267,7 @@ engage() {
 
 release() {
   log "=== RELEASE ==="
+  spotify_quiet_rule false                       # let Spotify behave normally again
   sp_up || { rm -f "$PREV_VOL_FILE"; return 0; }
   if [ -f "$PREV_VOL_FILE" ]; then
     local v; v="$(cat "$PREV_VOL_FILE")"
