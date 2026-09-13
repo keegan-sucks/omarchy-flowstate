@@ -125,10 +125,12 @@ one shared app serve many users, so each person registers their own at
 `http://127.0.0.1:8888/callback`, Web API). You supply only a **Client ID — no secret, no
 password** (the PKCE flow, so nothing sensitive is stored). Under the hood:
 `scripts/sync-liked-playlist.py` syncs (Python standard library only),
-`scripts/install-sync-schedule.sh` installs the `flowstate-liked-sync.timer` user timer and
-copies the runtime into `~/.config/flowstate/`, and your Client ID lives in
-`~/.config/flowstate/sync.env` (`scripts/sync.env.example`). Remove it any time with
-`bash scripts/install-sync-schedule.sh --remove`.
+`scripts/install-sync-schedule.sh` installs the `flowstate-liked-sync.timer` user timer,
+which runs that script in place from the plugin folder inside a sandboxed, per-user
+service (so the scheduled code stays the reviewed plugin snapshot — move or uninstall
+the plugin and the timer simply stops; re-run the installer to repoint it). Your Client
+ID lives in `~/.config/flowstate/sync.env` (`scripts/sync.env.example`). Remove it any
+time with `bash scripts/install-sync-schedule.sh --remove`.
 
 ---
 

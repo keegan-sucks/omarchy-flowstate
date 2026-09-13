@@ -44,6 +44,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
+import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PLAYLIST_NAME = "Liked (Flowstate)"
@@ -60,22 +61,53 @@ API = "https://api.spotify.com/v1"
 ACCOUNTS = "https://accounts.spotify.com"
 
 
+# --- Secure config-dir / file I/O -------------------------------------------
+# Credentials and the OAuth token live in CONFIG_DIR. Every read here refuses to
+# follow a symlink (O_NOFOLLOW) and every write lands via an O_EXCL temp file +
+# atomic rename, so a planted symlink or directory swap can neither redirect our
+# writes nor leak our reads to an attacker-chosen path.
+
+def _ensure_config_dir() -> None:
+    if os.path.islink(CONFIG_DIR):
+        sys.exit(f"Refusing to use a symlinked config directory: {CONFIG_DIR}")
+    os.makedirs(CONFIG_DIR, mode=0o700, exist_ok=True)
+    try:
+        os.chmod(CONFIG_DIR, 0o700)
+    except OSError:
+        pass
+
+
+def _read_text_nofollow(path: str) -> str | None:
+    """Read a file without following a final-component symlink; None if absent."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        # ELOOP (symlink) or similar — treat as unreadable rather than trust it.
+        return None
+    try:
+        with os.fdopen(fd, encoding="utf-8") as fh:
+            return fh.read(1 << 20)     # bounded read: env/token are tiny
+    except OSError:
+        return None
+
+
 # --- Config -----------------------------------------------------------------
 
 def load_env_file(path: str) -> None:
     """Read KEY=VALUE lines into os.environ (existing variables win)."""
-    try:
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, _, value = line.partition("=")
-                key, value = key.strip(), value.strip().strip('"').strip("'")
-                if key and key not in os.environ:
-                    os.environ[key] = value
-    except FileNotFoundError:
-        pass
+    data = _read_text_nofollow(path)
+    if data is None:
+        return
+    for line in data.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def client_id() -> str:
@@ -110,19 +142,31 @@ def _token_request(fields: dict) -> dict:
 
 
 def _save_token(tok: dict) -> None:
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    tmp = TOKEN_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(tok, fh)
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, TOKEN_FILE)
+    _ensure_config_dir()
+    # O_EXCL temp with an unpredictable name inside the 0700 dir, then atomic rename.
+    fd, tmp = tempfile.mkstemp(prefix=".liked-sync-token.", suffix=".tmp", dir=CONFIG_DIR)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(tok, fh)
+        if os.path.islink(TOKEN_FILE):
+            os.unlink(TOKEN_FILE)          # never rename over / through a planted link
+        os.replace(tmp, TOKEN_FILE)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def _load_token() -> dict | None:
+    data = _read_text_nofollow(TOKEN_FILE)
+    if data is None:
+        return None
     try:
-        with open(TOKEN_FILE, encoding="utf-8") as fh:
-            return json.load(fh)
-    except (FileNotFoundError, json.JSONDecodeError):
+        return json.loads(data)
+    except json.JSONDecodeError:
         return None
 
 
