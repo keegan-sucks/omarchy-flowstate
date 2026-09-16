@@ -76,20 +76,47 @@ Item {
   readonly property string likedSetupScript: scriptPath("setup-liked.sh")
 
   // --- Hardened child-process launch --------------------------------------
-  // Every process below is spawned with an ABSOLUTE executable and a CLOSED
-  // environment whose PATH lists only root-owned system directories. A
-  // user-writable entry planted earlier in PATH therefore can't shadow the
-  // interpreter we launch, and — because the launched shell scripts inherit this
-  // sanitized PATH — it can't shadow the security-relevant tools THEY resolve
-  // either (busctl, hyprctl, jq, sed, awk, setsid, …). The scripts additionally
-  // re-pin PATH and absolutize their own helpers as defence in depth.
+  // Every process below is spawned with an ABSOLUTE executable and a fully CLOSED
+  // environment: clearEnvironment drops the long-lived shell environment entirely,
+  // and we hand the child back only a trusted PATH (root-owned system dirs) plus a
+  // curated allowlist of session variables (HOME/XDG/D-Bus/Wayland/Hyprland/locale)
+  // read from our own environment. Nothing outside that list survives — so
+  // interpreter-hijack vectors such as LD_PRELOAD, LD_LIBRARY_PATH, BASH_ENV, ENV,
+  // PYTHONPATH, PYTHONHOME, PYTHONSTARTUP, GLIBC_TUNABLES, IFS, … can never reach
+  // the absolute bash/python we launch (before its own PATH pinning runs) or any
+  // tool the launched scripts then resolve.
   readonly property string trustedPath: "/usr/local/bin:/usr/bin:/bin:/usr/share/omarchy/bin"
   readonly property string binBash: "/usr/bin/bash"
   readonly property string binPwPlay: "/usr/bin/pw-play"
   readonly property string omarchyBin: "/usr/share/omarchy/bin"
 
+  // Session variables the launched tools genuinely need — a D-Bus/MPRIS + Wayland +
+  // PipeWire + Hyprland session, GUI launches (floating terminal, browser, Spotify),
+  // and $HOME/XDG path resolution. Only names that are actually set are forwarded.
+  // Deliberately EXCLUDES every code-injection vector (dynamic-linker, shell-startup
+  // and Python path/home variables), which is the whole point of the allowlist.
+  readonly property var sessionEnvKeys: [
+    "HOME", "USER", "LOGNAME",
+    "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME",
+    "XDG_DATA_DIRS", "XDG_CONFIG_DIRS", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE",
+    "XDG_SESSION_ID", "XDG_SEAT", "XDG_VTNR",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "WAYLAND_DISPLAY", "DISPLAY", "XAUTHORITY",
+    "HYPRLAND_INSTANCE_SIGNATURE",
+    "PIPEWIRE_RUNTIME_DIR", "PIPEWIRE_REMOTE",
+    "TERM",
+    "LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE"
+  ]
+
   function sysExec(argv) {
-    Quickshell.execDetached({ command: argv, environment: ({ "PATH": trustedPath }) })
+    var env = { "PATH": trustedPath }
+    for (var i = 0; i < sessionEnvKeys.length; i++) {
+      var k = sessionEnvKeys[i]
+      var v = Quickshell.env(k)
+      if (v !== undefined && v !== null && String(v).length > 0)
+        env[k] = String(v)
+    }
+    Quickshell.execDetached({ command: argv, environment: env, clearEnvironment: true })
   }
 
   // --- Derived state -------------------------------------------------------
