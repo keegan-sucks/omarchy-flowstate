@@ -21,13 +21,17 @@ pin() {  # <command> -> absolute path (or fail loudly)
 opt() { command -v -- "$1" 2>/dev/null || true; }   # optional tool -> abs path or ""
 
 PYTHON=/usr/bin/python3
-BASH="$(pin bash)"; CAT="$(pin cat)"; RM="$(pin rm)"; MKDIR="$(pin mkdir)"; CHMOD="$(pin chmod)"
+BASH="$(pin bash)"; CAT="$(pin cat)"; RM="$(pin rm)"
 SETSID="$(pin setsid)"; TIMEOUT="$(pin timeout)"; TEE="$(pin tee)"; AWK="$(pin awk)"; HEAD="$(pin head)"
 GUM="$(opt gum)"; OMARCHY="$(opt omarchy)"
 BROWSER_LAUNCH="$(opt omarchy-launch-browser)"; [[ -z "$BROWSER_LAUNCH" ]] && BROWSER_LAUNCH="$(opt xdg-open)"
 
 SCRIPT_DIR="$(cd -- "$("$(pin dirname)" -- "${BASH_SOURCE[0]}")" && pwd)"
 SYNC_SCRIPT="$SCRIPT_DIR/sync-liked-playlist.py"
+# Directory creation and every credential/token write/remove go through this helper,
+# which validates each path component with O_NOFOLLOW and works relative to the
+# retained directory fd — closing the parent-directory-swap window, not just the leaf.
+SECURE_FS="$SCRIPT_DIR/flowstate_secure_fs.py"
 PLUGIN_ID="io.github.keegan-sucks.flowstate"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/flowstate"
 ENV_FILE="$CONFIG_DIR/sync.env"
@@ -96,21 +100,15 @@ CID="$(ask "Paste your Client ID")"
 CID="${CID//[[:space:]]/}"
 [[ "$CID" =~ ^[A-Za-z0-9]{16,64}$ ]] || { echo "That doesn't look like a Spotify Client ID — aborting."; exit 1; }
 
-# Refuse a symlinked config dir, then write the env file with an O_EXCL temp +
-# atomic rename so the write never follows a pre-planted symlink.
-[[ -L "$CONFIG_DIR" ]] && { echo "flowstate: refusing to use symlinked directory: $CONFIG_DIR" >&2; exit 1; }
-"$MKDIR" -p -- "$CONFIG_DIR"
-"$CHMOD" 700 -- "$CONFIG_DIR"
-umask 077
-env_tmp="$("$(pin mktemp)" -- "$CONFIG_DIR/.sync.env.XXXXXX")" || exit 1
-"$CAT" >"$env_tmp" <<ENV
+# Write the env file through the secure helper: it reaches CONFIG_DIR by opening each
+# path component with O_NOFOLLOW (a symlinked leaf OR parent is refused, so the write
+# can't be redirected) and lands the file via an O_EXCL temp + fsync + renameat on the
+# validated directory fd. The dir is created 0700 and the file 0600.
+"$PYTHON" "$SECURE_FS" write --dir "$CONFIG_DIR" --name sync.env --mode 600 --dir-mode 700 <<ENV
 # Flowstate Liked-Songs mirror (PKCE flow — only a Client ID is needed; there is NO secret).
 SPOTIFY_CLIENT_ID=$CID
 SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
 ENV
-"$CHMOD" 600 -- "$env_tmp"
-[[ -L "$ENV_FILE" ]] && "$RM" -f -- "$ENV_FILE"
-"$(pin mv)" -f -- "$env_tmp" "$ENV_FILE"
 echo "Saved your Client ID to $ENV_FILE"
 
 # --- 2. Install the weekly timer + authorize + first sync ----------------------
@@ -118,7 +116,7 @@ echo
 bold "2) Installing the weekly refresh and authorizing (a browser tab will open —"
 echo "   approve access; nothing is stored but an OAuth token in $CONFIG_DIR)…"
 "$BASH" "$SCRIPT_DIR/install-sync-schedule.sh" >/dev/null
-"$RM" -f -- "$CONFIG_DIR/liked-sync-token.json"          # force a fresh PKCE authorization
+"$PYTHON" "$SECURE_FS" rm --dir "$CONFIG_DIR" --name liked-sync-token.json   # force a fresh PKCE authorization
 
 # Run the first authorization + sync under a hard wall-clock deadline, in its own
 # session (setsid --wait), escalating TERM->KILL if it overruns, and cap the

@@ -44,8 +44,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# TOCTOU-safe file primitives (component-wise O_NOFOLLOW traversal + openat-relative
+# create/fsync/rename/unlink) live in the sibling module. Import it by the script's
+# own directory so the reviewed snapshot's copy is always the one used, whether run
+# directly or from the systemd timer.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import flowstate_secure_fs as sfs  # noqa: E402
 
 PLAYLIST_NAME = "Liked (Flowstate)"
 PLAYLIST_DESC = "Auto-synced mirror of Liked Songs (managed by Flowstate)."
@@ -60,47 +66,80 @@ TOKEN_FILE = os.path.join(CONFIG_DIR, "liked-sync-token.json")
 API = "https://api.spotify.com/v1"
 ACCOUNTS = "https://accounts.spotify.com"
 
+# Ceilings on HTTP response bodies. Spotify's replies here are small (a token blob,
+# a page of playlist items); these only exist so a hostile or malfunctioning
+# endpoint can't make us buffer an unbounded body in the interactive setup OR the
+# unattended timer. We read at most limit+1 bytes and reject anything larger.
+MAX_RESPONSE_BYTES = 8 << 20      # 8 MiB — generous for any real API page
+MAX_ERROR_BYTES = 64 << 10        # error bodies are only shown truncated anyway
+
+
+def _read_capped(resp, limit: int = MAX_RESPONSE_BYTES) -> bytes:
+    """Read an HTTP response body under a strict byte ceiling.
+
+    Never buffers more than ``limit + 1`` bytes; a body that reaches ``limit + 1``
+    is rejected outright rather than decoded. Works for both success responses and
+    urllib HTTPError objects, and for chunked transfers (we loop to EOF).
+    """
+    chunks: list[bytes] = []
+    remaining = limit + 1
+    while remaining > 0:
+        chunk = resp.read(remaining)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    if remaining <= 0:
+        raise RuntimeError(f"Spotify response exceeded the {limit}-byte limit; refusing to buffer it.")
+    return b"".join(chunks)
+
 
 # --- Secure config-dir / file I/O -------------------------------------------
-# Credentials and the OAuth token live in CONFIG_DIR. Every read here refuses to
-# follow a symlink (O_NOFOLLOW) and every write lands via an O_EXCL temp file +
-# atomic rename, so a planted symlink or directory swap can neither redirect our
-# writes nor leak our reads to an attacker-chosen path.
+# Credentials and the OAuth token live in CONFIG_DIR. Reads and writes go through
+# flowstate_secure_fs: the directory is reached by opening each path component with
+# O_NOFOLLOW (a symlinked component anywhere in the chain is refused), reads use
+# openat + O_NOFOLLOW under a byte ceiling, and writes are an O_EXCL temp + fsync +
+# renameat performed relative to that retained, validated directory fd. A planted
+# symlink or a parent-directory swap can therefore neither redirect our writes nor
+# leak our reads to an attacker-chosen path.
 
-def _ensure_config_dir() -> None:
-    if os.path.islink(CONFIG_DIR):
-        sys.exit(f"Refusing to use a symlinked config directory: {CONFIG_DIR}")
-    os.makedirs(CONFIG_DIR, mode=0o700, exist_ok=True)
+def _read_from_config(name: str) -> bytes | None:
+    """Bounded, no-follow read of ``name`` inside CONFIG_DIR (None if absent)."""
     try:
-        os.chmod(CONFIG_DIR, 0o700)
-    except OSError:
-        pass
-
-
-def _read_text_nofollow(path: str) -> str | None:
-    """Read a file without following a final-component symlink; None if absent."""
-    try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    except FileNotFoundError:
-        return None
-    except OSError:
-        # ELOOP (symlink) or similar — treat as unreadable rather than trust it.
+        dfd = sfs.dir_fd(CONFIG_DIR, create=False)
+    except (FileNotFoundError, OSError):
         return None
     try:
-        with os.fdopen(fd, encoding="utf-8") as fh:
-            return fh.read(1 << 20)     # bounded read: env/token are tiny
-    except OSError:
-        return None
+        return sfs.read_bounded(dfd, name)
+    finally:
+        os.close(dfd)
+
+
+def _write_to_config(name: str, data: bytes, mode: int = 0o600) -> None:
+    """Atomic, no-follow write of ``name`` inside CONFIG_DIR (created 0700)."""
+    dfd = sfs.dir_fd(CONFIG_DIR, create=True, mode=0o700)
+    try:
+        sfs.atomic_write(dfd, name, data, mode)
+    finally:
+        os.close(dfd)
 
 
 # --- Config -----------------------------------------------------------------
 
 def load_env_file(path: str) -> None:
     """Read KEY=VALUE lines into os.environ (existing variables win)."""
-    data = _read_text_nofollow(path)
-    if data is None:
+    directory, name = os.path.split(path)
+    try:
+        dfd = sfs.dir_fd(directory, create=False)
+    except (FileNotFoundError, OSError):
         return
-    for line in data.splitlines():
+    try:
+        raw = sfs.read_bounded(dfd, name)
+    finally:
+        os.close(dfd)
+    if raw is None:
+        return
+    for line in raw.decode("utf-8", "replace").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -134,38 +173,24 @@ def _token_request(fields: dict) -> dict:
                                  headers={"Content-Type": "application/x-www-form-urlencoded"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            tok = json.load(resp)
+            tok = json.loads(_read_capped(resp) or b"{}")
     except urllib.error.HTTPError as e:
-        sys.exit(f"Spotify token request failed ({e.code}): {e.read().decode(errors='replace')[:300]}")
+        detail = _read_capped(e, MAX_ERROR_BYTES).decode(errors="replace")[:300]
+        sys.exit(f"Spotify token request failed ({e.code}): {detail}")
     tok["expires_at"] = int(time.time()) + int(tok.get("expires_in", 3600)) - 60
     return tok
 
 
 def _save_token(tok: dict) -> None:
-    _ensure_config_dir()
-    # O_EXCL temp with an unpredictable name inside the 0700 dir, then atomic rename.
-    fd, tmp = tempfile.mkstemp(prefix=".liked-sync-token.", suffix=".tmp", dir=CONFIG_DIR)
-    try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(tok, fh)
-        if os.path.islink(TOKEN_FILE):
-            os.unlink(TOKEN_FILE)          # never rename over / through a planted link
-        os.replace(tmp, TOKEN_FILE)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    _write_to_config(os.path.basename(TOKEN_FILE), json.dumps(tok).encode("utf-8"), 0o600)
 
 
 def _load_token() -> dict | None:
-    data = _read_text_nofollow(TOKEN_FILE)
-    if data is None:
+    raw = _read_from_config(os.path.basename(TOKEN_FILE))
+    if raw is None:
         return None
     try:
-        return json.loads(data)
+        return json.loads(raw)
     except json.JSONDecodeError:
         return None
 
@@ -261,7 +286,7 @@ class Spotify:
             })
             try:
                 with urllib.request.urlopen(req, timeout=60) as resp:
-                    raw = resp.read()
+                    raw = _read_capped(resp)
                     return json.loads(raw) if raw.strip() else {}
             except urllib.error.HTTPError as e:
                 if e.code == 429 and attempt < 5:           # rate limited — honour Retry-After
@@ -270,7 +295,7 @@ class Spotify:
                 if e.code in (500, 502, 503) and attempt < 5:
                     time.sleep(2 * (attempt + 1))
                     continue
-                detail = e.read().decode(errors="replace")[:300]
+                detail = _read_capped(e, MAX_ERROR_BYTES).decode(errors="replace")[:300]
                 raise RuntimeError(f"{method} {path} failed ({e.code}): {detail}") from None
         raise RuntimeError(f"{method} {path}: gave up after retries")
 
