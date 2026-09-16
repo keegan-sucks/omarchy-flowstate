@@ -27,26 +27,24 @@ pin() {  # <command> -> absolute path (or fail loudly)
   [[ -n "$p" && -x "$p" ]] || { printf 'flowstate: required command not found: %s\n' "$1" >&2; exit 127; }
   printf '%s' "$p"
 }
-SYSTEMCTL="$(pin systemctl)"; MKDIR="$(pin mkdir)"; CHMOD="$(pin chmod)"
-RM="$(pin rm)"; MV="$(pin mv)"; MKTEMP="$(pin mktemp)"; CAT="$(pin cat)"; DIRNAME="$(pin dirname)"
+SYSTEMCTL="$(pin systemctl)"; DIRNAME="$(pin dirname)"
 PYTHON=/usr/bin/python3
 
 SCRIPT_DIR="$(cd -- "$("$DIRNAME" -- "${BASH_SOURCE[0]}")" && pwd)"
 SYNC_SCRIPT="$SCRIPT_DIR/sync-liked-playlist.py"
+# All directory creation and file create/rename/unlink below go through this helper,
+# which traverses every path component with O_NOFOLLOW and operates relative to the
+# retained validated directory fd — so neither a symlinked leaf nor a swapped PARENT
+# directory can redirect a unit-file write or a removal.
+SECURE_FS="$SCRIPT_DIR/flowstate_secure_fs.py"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/flowstate"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 UNIT="flowstate-liked-sync"
 
-# Refuse to operate through a symlinked config/unit dir — a planted link could
-# redirect our writes (unit files, credentials) somewhere else.
-for d in "$CONFIG_DIR" "$UNIT_DIR"; do
-  [[ -L "$d" ]] && { printf 'flowstate: refusing to use symlinked directory: %s\n' "$d" >&2; exit 1; }
-done
-
 if [ "${1:-}" = "--remove" ]; then
   "$SYSTEMCTL" --user disable --now "$UNIT.timer" >/dev/null 2>&1 || true
-  "$RM" -f -- "$UNIT_DIR/$UNIT.timer" "$UNIT_DIR/$UNIT.service" \
-              "$CONFIG_DIR/sync-liked-playlist.py"   # also drop any legacy copied runtime
+  "$PYTHON" "$SECURE_FS" rm --dir "$UNIT_DIR" --name "$UNIT.timer" --name "$UNIT.service"
+  "$PYTHON" "$SECURE_FS" rm --dir "$CONFIG_DIR" --name sync-liked-playlist.py  # drop any legacy copied runtime
   "$SYSTEMCTL" --user daemon-reload >/dev/null 2>&1 || true
   echo "✓ Removed the weekly Liked-mirror sync."
   echo "  Kept: $CONFIG_DIR/sync.env and liked-sync-token.json (delete the folder to purge)."
@@ -55,22 +53,17 @@ fi
 
 [[ -f "$SYNC_SCRIPT" ]] || { printf 'flowstate: sync script missing: %s\n' "$SYNC_SCRIPT" >&2; exit 1; }
 
-"$MKDIR" -p -- "$CONFIG_DIR" "$UNIT_DIR"
-"$CHMOD" 700 -- "$CONFIG_DIR"
+# Create the private config dir along a fully no-follow-validated path.
+"$PYTHON" "$SECURE_FS" mkdir --path "$CONFIG_DIR" --mode 700
 
-# Write each unit to an O_EXCL temp file in the same directory, then atomically
-# rename it into place — no write ever follows a pre-planted symlink at the
-# destination name, and readers never see a half-written unit.
-install_unit() {  # <dest>  (content on stdin)
-  local dest="$1" tmp
-  tmp="$("$MKTEMP" -- "$UNIT_DIR/.${UNIT}.XXXXXX")" || exit 1
-  "$CAT" >"$tmp"
-  "$CHMOD" 600 -- "$tmp"
-  [[ -L "$dest" ]] && "$RM" -f -- "$dest"
-  "$MV" -f -- "$tmp" "$dest"
+# Each unit is written atomically (O_EXCL temp → fsync → renameat) relative to a
+# validated UNIT_DIR fd — no write ever follows a pre-planted symlink, at the leaf
+# or at any parent, and readers never see a half-written unit.
+install_unit() {  # <unit-filename>  (content on stdin)
+  "$PYTHON" "$SECURE_FS" write --dir "$UNIT_DIR" --name "$1" --mode 600 --dir-mode 700
 }
 
-install_unit "$UNIT_DIR/$UNIT.service" <<UNITEOF
+install_unit "$UNIT.service" <<UNITEOF
 [Unit]
 Description=Flowstate: refresh the "Liked (Flowstate)" mirror playlist
 
@@ -108,7 +101,7 @@ CapabilityBoundingSet=
 UMask=0077
 UNITEOF
 
-install_unit "$UNIT_DIR/$UNIT.timer" <<UNITEOF
+install_unit "$UNIT.timer" <<UNITEOF
 [Unit]
 Description=Flowstate: weekly Liked-Songs mirror refresh
 

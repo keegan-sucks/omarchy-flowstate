@@ -75,6 +75,23 @@ Item {
   readonly property string sessionScript: scriptPath("flowstate-session.sh")
   readonly property string likedSetupScript: scriptPath("setup-liked.sh")
 
+  // --- Hardened child-process launch --------------------------------------
+  // Every process below is spawned with an ABSOLUTE executable and a CLOSED
+  // environment whose PATH lists only root-owned system directories. A
+  // user-writable entry planted earlier in PATH therefore can't shadow the
+  // interpreter we launch, and — because the launched shell scripts inherit this
+  // sanitized PATH — it can't shadow the security-relevant tools THEY resolve
+  // either (busctl, hyprctl, jq, sed, awk, setsid, …). The scripts additionally
+  // re-pin PATH and absolutize their own helpers as defence in depth.
+  readonly property string trustedPath: "/usr/local/bin:/usr/bin:/bin:/usr/share/omarchy/bin"
+  readonly property string binBash: "/usr/bin/bash"
+  readonly property string binPwPlay: "/usr/bin/pw-play"
+  readonly property string omarchyBin: "/usr/share/omarchy/bin"
+
+  function sysExec(argv) {
+    Quickshell.execDetached({ command: argv, environment: ({ "PATH": trustedPath }) })
+  }
+
   // --- Derived state -------------------------------------------------------
   readonly property bool isSessionActive: phase !== "idle"
   readonly property bool onBreak: phase === "short-break"
@@ -268,8 +285,8 @@ Item {
   // --- Soundtrack orchestration (scripts/flowstate-session.sh) --------------
   // Arg order MUST match the script: <action> <target> <volume> <workspace> <shuffle 0|1>
   function runSession(action) {
-    Quickshell.execDetached([
-      "bash", sessionScript, action,
+    sysExec([
+      binBash, sessionScript, action,
       focusPlaylist(), String(spotifyVolume), String(spotifyWorkspace),
       alwaysShuffle ? "1" : "0"
     ])
@@ -277,8 +294,9 @@ Item {
 
   // Open the guided (optional) Liked-Songs auto-refresh setup in a floating terminal.
   function openLikedSetup() {
-    Quickshell.execDetached([
-      "omarchy-launch-floating-terminal-with-presentation", "bash", likedSetupScript
+    sysExec([
+      omarchyBin + "/omarchy-launch-floating-terminal-with-presentation",
+      binBash, likedSetupScript
     ])
   }
 
@@ -307,14 +325,14 @@ Item {
 
   function playSoundFile(name, volume) {
     if (!name || name.length === 0) return
-    Quickshell.execDetached([
-      "pw-play", "--volume", String(Math.max(0, Math.min(1, volume))),
+    sysExec([
+      binPwPlay, "--volume", String(Math.max(0, Math.min(1, volume))),
       "/usr/share/sounds/freedesktop/stereo/" + name + ".oga"
     ])
   }
 
   function notify(message) {
-    Quickshell.execDetached(["omarchy-notification-send", "-g", "◷", "Flowstate", message])
+    sysExec([omarchyBin + "/omarchy-notification-send", "-g", "◷", "Flowstate", message])
   }
 
   Timer {
